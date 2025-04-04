@@ -1,0 +1,255 @@
+4:48:42 PM [polygon] Using Polygon API key: 4uXK...
+Running database migrations...
+Migration started...
+Looking for migrations in: /home/runner/workspace/drizzle/migrations
+Found files in migrations directory: [
+  '0000_initial_migration.sql',
+  '0001_add_price_data.sql',
+  '0002_add_portfolios.sql',
+  '0002_add_trades_currentprice_and_summary.sql',
+  '0003_optimize_database_schema.sql',
+  '0004_upgrade_economic_events',
+  '0004_upgrade_economic_events.sql'
+]
+Found 6 migration files: [
+  '0000_initial_migration.sql',
+  '0001_add_price_data.sql',
+  '0002_add_portfolios.sql',
+  '0002_add_trades_currentprice_and_summary.sql',
+  '0003_optimize_database_schema.sql',
+  '0004_upgrade_economic_events.sql'
+]
+4:48:42 PM [express] AI Service health check failed: connect ECONNREFUSED 0.0.0.0:5000
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '42P07',
+  message: 'relation "migrations" already exists, skipping',
+  file: 'parse_utilcmd.c',
+  line: '207',
+  routine: 'transformCreateStmt'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '42P07',
+  message: 'relation "drizzle_migrations" already exists, skipping',
+  file: 'parse_utilcmd.c',
+  line: '207',
+  routine: 'transformCreateStmt'
+}
+Already applied migrations: [
+  '0000_initial_migration.sql',
+  '0001_add_price_data.sql',
+  '0002_add_portfolios.sql',
+  '0002_add_trades_currentprice_and_summary.sql',
+  '0003_optimize_database_schema.sql',
+  '0004_add_trades_currentprice_and_summary.sql',
+  '0000_tiny_blue_blade.sql',
+  '0004_upgrade_economic_events.sql'
+]
+Migration 0000_initial_migration.sql already applied, skipping
+Migration 0001_add_price_data.sql already applied, skipping
+Migration 0002_add_portfolios.sql already applied, skipping
+Migration 0002_add_trades_currentprice_and_summary.sql already applied, skipping
+Migration 0003_optimize_database_schema.sql already applied, skipping
+Migration 0004_upgrade_economic_events.sql already applied, skipping
+All migrations completed successfully
+Migrations completed successfully
+Database migrations completed successfully
+4:48:45 PM [polygonWs] Connecting to Polygon Crypto WebSocket...
+4:48:45 PM [polygonWs] Connecting to Polygon Forex WebSocket...
+4:48:45 PM [marketData] Subscription batch processor started with 3000ms interval
+4:48:45 PM [marketData] Found crypto price updater at /home/runner/workspace/server/crypto-price-updater.mjs
+4:48:45 PM [express] Server running on port 8080
+4:48:45 PM [express] Crypto markets are open 24/7 - prices should update even on weekends
+4:48:45 PM [crypto-updater] Crypto price updater started with interval: 10000ms
+4:48:45 PM [marketData] Crypto price updater started successfully
+4:48:45 PM [marketData] Market data service initialized with dedicated crypto price updater
+4:48:46 PM [polygonWs] Connected to Polygon Forex WebSocket
+4:48:46 PM [polygonWs] Authenticating with Polygon Forex WebSocket...
+4:48:46 PM [polygonWs] Forex WebSocket Status: connected
+4:48:46 PM [polygonWs] Connected to Polygon Crypto WebSocket
+4:48:46 PM [polygonWs] Authenticating with Polygon Crypto WebSocket...
+4:48:46 PM [polygonWs] Crypto WebSocket Status: connected
+4:48:46 PM [polygonWs] Forex WebSocket Status: auth_success
+4:48:46 PM [polygonWs] Successfully authenticated with Polygon Forex WebSocket
+4:48:46 PM [polygonWs] Crypto WebSocket Status: auth_success
+4:48:46 PM [polygonWs] Successfully authenticated with Polygon Crypto WebSocket
+4:48:47 PM [crypto-updater] Found 5 crypto assets to update
+4:48:47 PM [crypto-updater] Fetching latest price for X:BTCUSD (X:BTCUSD) from: https://api.polygon.io/v2/aggs/ticker/X:BTCUSD/range/1/minute/2025-03-27/2025-03-27?limit=1&sort=desc&apiKey=4uXKiPQy5pIVX2ipvpPrx6RF3ia9odYf
+4:48:48 PM [crypto-updater] Got real-time price for X:BTCUSD: 87006.22
+4:48:48 PM [crypto-updater] Skipping update for BTC - price change (-0.04%) below threshold
+4:48:48 PM [crypto-updater] Fetching latest price for X:ADAUSD (X:ADAUSD) from: https://api.polygon.io/v2/aggs/ticker/X:ADAUSD/range/1/minute/2025-03-27/2025-03-27?limit=1&sort=desc&apiKey=4uXKiPQy5pIVX2ipvpPrx6RF3ia9odYf
+4:48:48 PM [crypto-updater] Got real-time price for X:ADAUSD: 0.7346
+4:48:48 PM [crypto-updater] Skipping update for ADA - price change (-0.04%) below threshold
+4:48:48 PM [crypto-updater] Fetching latest price for X:SOLUSD (X:SOLUSD) from: https://api.polygon.io/v2/aggs/ticker/X:SOLUSD/range/1/minute/2025-03-27/2025-03-27?limit=1&sort=desc&apiKey=4uXKiPQy5pIVX2ipvpPrx6RF3ia9odYf
+4:48:48 PM [crypto-updater] Got real-time price for X:SOLUSD: 138.14
+4:48:49 PM [marketData] Updated price for EURUSD: $1.07406
+4:48:51 PM [crypto-updater] Updated price for SOLUSD: $138.14 (-0.28%)
+4:48:51 PM [crypto-updater] Fetching latest price for X:TIAUSD (X:TIAUSD) from: https://api.polygon.io/v2/aggs/ticker/X:TIAUSD/range/1/minute/2025-03-27/2025-03-27?limit=1&sort=desc&apiKey=4uXKiPQy5pIVX2ipvpPrx6RF3ia9odYf
+4:48:51 PM [crypto-updater] Got real-time price for X:TIAUSD: 3.751
+4:48:51 PM [marketData] Updated price for EURUSD: $1.07406
+4:48:51 PM [crypto-updater] Updated price for TIA: $3.751 (-0.16%)
+4:48:51 PM [crypto-updater] Fetching latest price for X:ETHUSD (X:ETHUSD) from: https://api.polygon.io/v2/aggs/ticker/X:ETHUSD/range/1/minute/2025-03-27/2025-03-27?limit=1&sort=desc&apiKey=4uXKiPQy5pIVX2ipvpPrx6RF3ia9odYf
+4:48:52 PM [crypto-updater] Got real-time price for X:ETHUSD: 2007.6
+4:48:52 PM [crypto-updater] Updated price for ETH: $2007.6 (-0.18%)
+4:48:54 PM [express] GET /api/auth/session 304 in 868ms :: {"id":"ec6fa50a-83a5-49f0-9838-466fba9d6f…
+4:48:55 PM [express] GET /api/auth/session 304 in 879ms :: {"id":"ec6fa50a-83a5-49f0-9838-466fba9d6f…
+4:48:55 PM [express] GET /api/user 304 in 1278ms :: {"id":"ec6fa50a-83a5-49f0-9838-466fba9d6fb9","us…
+4:48:56 PM [crypto-updater] Found 5 crypto assets to update
+4:48:56 PM [crypto-updater] Using cached price for X:BTCUSD: 87006.22
+4:48:56 PM [crypto-updater] Skipping update for BTC - price change (-0.04%) below threshold
+4:48:56 PM [crypto-updater] Using cached price for X:ADAUSD: 0.7346
+4:48:56 PM [crypto-updater] Skipping update for ADA - price change (-0.04%) below threshold
+4:48:56 PM [crypto-updater] Using cached price for X:SOLUSD: 138.14
+4:48:56 PM [crypto-updater] Skipping update for SOLUSD - price change (0.00%) below threshold
+4:48:56 PM [crypto-updater] Using cached price for X:TIAUSD: 3.751
+4:48:56 PM [crypto-updater] Skipping update for TIA - price change (0.00%) below threshold
+4:48:56 PM [crypto-updater] Using cached price for X:ETHUSD: 2007.6
+4:48:56 PM [crypto-updater] Skipping update for ETH - price change (0.00%) below threshold
+4:48:56 PM [marketData] WebSocket client connected
+4:48:56 PM [marketData] Subscribing to Polygon crypto streams for: ADA, SOLUSD, BTC, TIA, ETH
+4:48:56 PM [polygonWs] Subscribing to crypto channels: {"action":"subscribe","params":"XT.ADA,XT.SOLUSD,XT.BTC,XT.TIA,XT.ETH"}
+4:48:56 PM [polygonWs] Subscribing to crypto aggregates: {"action":"subscribe","params":"XA.ADA,XA.SOLUSD,XA.BTC,XA.TIA,XA.ETH"}
+4:48:56 PM [marketData] Subscribing to Polygon forex streams for: EURUSD
+4:48:56 PM [polygonWs] Subscribing to forex channels: {"action":"subscribe","params":"C.EURUSD"}
+4:48:56 PM [marketData] Subscribing to Polygon crypto streams for: ADA, SOLUSD, BTC, TIA, ETH
+4:48:56 PM [polygonWs] Subscribing to crypto channels: {"action":"subscribe","params":"XT.ADA,XT.SOLUSD,XT.BTC,XT.TIA,XT.ETH"}
+4:48:56 PM [polygonWs] Subscribing to crypto aggregates: {"action":"subscribe","params":"XA.ADA,XA.SOLUSD,XA.BTC,XA.TIA,XA.ETH"}
+4:48:56 PM [marketData] Subscribing to Polygon forex streams for: EURUSD
+4:48:56 PM [polygonWs] Subscribing to forex channels: {"action":"subscribe","params":"C.EURUSD"}
+4:48:56 PM [polygonWs] Crypto WebSocket Status: success
+4:48:56 PM [polygonWs] Crypto WebSocket Status: success
+4:48:56 PM [polygonWs] Crypto WebSocket Status: success
+4:48:56 PM [polygonWs] Crypto WebSocket Status: success
+4:48:56 PM [polygonWs] Crypto WebSocket Status: success
+4:48:56 PM [polygonWs] Crypto WebSocket Status: success
+4:48:56 PM [polygonWs] Crypto WebSocket Status: success
+4:48:56 PM [polygonWs] Crypto WebSocket Status: success
+4:48:56 PM [polygonWs] Crypto WebSocket Status: success
+4:48:56 PM [polygonWs] Crypto WebSocket Status: success
+4:48:56 PM [polygonWs] Forex WebSocket Status: success
+4:48:56 PM [express] GET /api/assets 200 in 1072ms :: [{"id":"babb1388-28d4-48f4-a970-278e47c3cd9f",…
+4:48:57 PM [express] GET /api/user 304 in 1283ms :: {"id":"ec6fa50a-83a5-49f0-9838-466fba9d6fb9","us…
+4:48:57 PM [marketData] Client subscribed to 6 symbols. Total active client subscriptions: 6
+4:48:57 PM [marketData] Client subscribed to ETH
+4:48:57 PM [marketData] Client subscribed to 6 symbols. Total active client subscriptions: 6
+4:48:57 PM [marketData] Client subscribed to ETH
+4:48:57 PM [marketData] WebSocket client connected
+4:48:57 PM [marketData] Processing 5 queued crypto subscriptions
+4:48:57 PM [polygonWs] Subscribing to crypto channels: {"action":"subscribe","params":"XT.ADA,XT.SOLUSD,XT.BTC,XT.TIA,XT.ETH"}
+4:48:57 PM [polygonWs] Subscribing to crypto aggregates: {"action":"subscribe","params":"XA.ADA,XA.SOLUSD,XA.BTC,XA.TIA,XA.ETH"}
+4:48:57 PM [marketData] Subscribed to 5 new crypto symbols
+4:48:57 PM [marketData] Processing 1 queued forex subscriptions
+4:48:57 PM [polygonWs] Subscribing to forex channels: {"action":"subscribe","params":"C.EURUSD"}
+4:48:57 PM [marketData] Subscribed to 1 new forex symbols
+PostgresError: invalid input syntax for type uuid: "trending"
+    at ErrorResponse (file:///home/runner/workspace/node_modules/postgres/src/connection.js:788:26)
+    at handle (file:///home/runner/workspace/node_modules/postgres/src/connection.js:474:6)
+    at TLSSocket.data (file:///home/runner/workspace/node_modules/postgres/src/connection.js:315:9)
+    at TLSSocket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+    at TLSWrap.onStreamRead (node:internal/stream_base_commons:191:23) {
+  severity_local: 'ERROR',
+  severity: 'ERROR',
+  code: '22P02',
+  where: "unnamed portal parameter $1 = '...'",
+  file: 'uuid.c',
+  line: '133',
+  routine: 'string_to_uuid'
+}
+4:48:58 PM [polygonWs] Forex WebSocket Status: max_connections
+4:48:58 PM [polygonWs] Forex WebSocket connection closed: 1008 - 
+4:48:58 PM [polygonWs] Attempting to reconnect to Forex WebSocket (1/10)
+4:48:58 PM [express] GET /api/assets/trending 500 in 2590ms :: {"message":"Internal server error"}
+4:48:58 PM [marketData] Updated price for EURUSD: $1.07406
+4:48:58 PM [express] GET /api/portfolio-summary 200 in 2679ms :: {"id":"03a58bac-48f1-49a1-a29d-deac…
+4:48:59 PM [polygonWs] Crypto WebSocket Status: max_connections
+4:48:59 PM [polygonWs] Crypto WebSocket connection closed: 1008 - 
+4:48:59 PM [polygonWs] Attempting to reconnect to Crypto WebSocket (1/10)
+Watchlist API: Using authenticated user ID: ec6fa50a-83a5-49f0-9838-466fba9d6fb9
+PostgresError: invalid input syntax for type uuid: "trending"
+    at ErrorResponse (file:///home/runner/workspace/node_modules/postgres/src/connection.js:788:26)
+    at handle (file:///home/runner/workspace/node_modules/postgres/src/connection.js:474:6)
+    at TLSSocket.data (file:///home/runner/workspace/node_modules/postgres/src/connection.js:315:9)
+    at TLSSocket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+    at TLSWrap.onStreamRead (node:internal/stream_base_commons:191:23) {
+  severity_local: 'ERROR',
+  severity: 'ERROR',
+  code: '22P02',
+  where: "unnamed portal parameter $1 = '...'",
+  file: 'uuid.c',
+  line: '133',
+  routine: 'string_to_uuid'
+}
+4:48:59 PM [express] GET /api/assets/trending 500 in 1291ms :: {"message":"Internal server error"}
+4:48:59 PM [marketData] Subscribing to Polygon crypto streams for: ADA, SOLUSD, BTC, TIA, ETH
+4:48:59 PM [polygonWs] Queued crypto subscription for ADA, SOLUSD, BTC, TIA, ETH
+4:48:59 PM [marketData] Subscribing to Polygon forex streams for: EURUSD
+4:48:59 PM [polygonWs] Queued forex subscription for EURUSD
+4:48:59 PM [marketData] Subscribing to Polygon crypto streams for: ADA, SOLUSD, BTC, TIA, ETH
+4:48:59 PM [polygonWs] Queued crypto subscription for ADA, SOLUSD, BTC, TIA, ETH
+4:48:59 PM [marketData] Subscribing to Polygon forex streams for: EURUSD
+4:48:59 PM [polygonWs] Queued forex subscription for EURUSD
+4:48:59 PM [express] GET /api/portfolio-summary 304 in 1315ms :: {"id":"03a58bac-48f1-49a1-a29d-deac…
+4:48:59 PM [express] GET /api/assets 200 in 2755ms :: [{"id":"babb1388-28d4-48f4-a970-278e47c3cd9f",…
+4:49:00 PM [express] GET /api/watchlist 304 in 4388ms :: []
+4:49:00 PM [marketData] Client subscribed to 6 symbols. Total active client subscriptions: 6
+4:49:00 PM [marketData] Client subscribed to ETH
+4:49:00 PM [marketData] Client subscribed to 6 symbols. Total active client subscriptions: 6
+4:49:00 PM [marketData] Client subscribed to ETH
+4:49:00 PM [marketData] Processing 5 queued crypto subscriptions
+4:49:00 PM [marketData] All 5 crypto symbols were already subscribed
+4:49:00 PM [marketData] Processing 1 queued forex subscriptions
+4:49:00 PM [marketData] All 1 forex symbols were already subscribed
+Watchlist API: Using authenticated user ID: ec6fa50a-83a5-49f0-9838-466fba9d6fb9
+Updating current prices for 1 open trades
+4:49:01 PM [express] GET /api/watchlist 304 in 1323ms :: []
+4:49:01 PM [marketData] Updated price for EURUSD: $1.07406
+4:49:03 PM [polygonWs] Connecting to Polygon Forex WebSocket...
+4:49:03 PM [polygonWs] Connected to Polygon Forex WebSocket
+4:49:03 PM [polygonWs] Authenticating with Polygon Forex WebSocket...
+4:49:03 PM [polygonWs] Forex WebSocket Status: connected
+4:49:04 PM [polygonWs] Forex WebSocket Status: auth_success
+4:49:04 PM [polygonWs] Successfully authenticated with Polygon Forex WebSocket
+4:49:04 PM [polygonWs] Connecting to Polygon Crypto WebSocket...
+4:49:04 PM [polygonWs] Subscribing to forex channels: {"action":"subscribe","params":"C.EURUSD"}
+4:49:05 PM [polygonWs] Connected to Polygon Crypto WebSocket
+4:49:05 PM [polygonWs] Authenticating with Polygon Crypto WebSocket...
+4:49:05 PM [polygonWs] Crypto WebSocket Status: connected
+4:49:05 PM [polygonWs] Forex WebSocket Status: success
+4:49:05 PM [polygonWs] Crypto WebSocket Status: auth_success
+4:49:05 PM [polygonWs] Successfully authenticated with Polygon Crypto WebSocket
+4:49:05 PM [crypto-updater] Found 5 crypto assets to update
+4:49:05 PM [crypto-updater] Using cached price for X:BTCUSD: 87006.22
+4:49:05 PM [crypto-updater] Skipping update for BTC - price change (-0.04%) below threshold
+4:49:05 PM [crypto-updater] Using cached price for X:ADAUSD: 0.7346
+4:49:05 PM [crypto-updater] Skipping update for ADA - price change (-0.04%) below threshold
+4:49:05 PM [crypto-updater] Using cached price for X:SOLUSD: 138.14
+4:49:05 PM [crypto-updater] Skipping update for SOLUSD - price change (0.00%) below threshold
+4:49:05 PM [crypto-updater] Using cached price for X:TIAUSD: 3.751
+4:49:05 PM [crypto-updater] Skipping update for TIA - price change (0.00%) below threshold
+4:49:05 PM [crypto-updater] Using cached price for X:ETHUSD: 2007.6
+4:49:05 PM [crypto-updater] Skipping update for ETH - price change (0.00%) below threshold
+4:49:06 PM [polygonWs] Subscribing to crypto channels: {"action":"subscribe","params":"XT.ADA,XT.SOLUSD,XT.BTC,XT.TIA,XT.ETH"}
+4:49:06 PM [polygonWs] Subscribing to crypto aggregates: {"action":"subscribe","params":"XA.ADA,XA.SOLUSD,XA.BTC,XA.TIA,XA.ETH"}
+4:49:06 PM [polygonWs] Crypto WebSocket Status: success
+4:49:06 PM [polygonWs] Crypto WebSocket Status: success
+4:49:06 PM [polygonWs] Crypto WebSocket Status: success
+4:49:06 PM [polygonWs] Crypto WebSocket Status: success
+4:49:06 PM [polygonWs] Crypto WebSocket Status: success
+4:49:06 PM [polygonWs] Crypto WebSocket Status: success
+4:49:06 PM [polygonWs] Crypto WebSocket Status: success
+4:49:06 PM [polygonWs] Crypto WebSocket Status: success
+4:49:06 PM [polygonWs] Crypto WebSocket Status: success
+4:49:06 PM [polygonWs] Crypto WebSocket Status: success
+4:49:06 PM [marketData] Updated price for EURUSD: $1.07406
+4:49:09 PM [express] GET /api/portfolio-summary 200 in 1327ms :: {"id":"03a58bac-48f1-49a1-a29d-deac…
+4:49:11 PM [express] GET /api/portfolio-summary 304 in 1344ms :: {"id":"03a58bac-48f1-49a1-a29d-deac…
+4:49:11 PM [marketData] Updated price for EURUSD: $1.07406

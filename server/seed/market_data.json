@@ -1,0 +1,137 @@
+[
+  {
+    "symbol": "AAPL",
+    "price": "170.89",
+    "change": "2.45",
+    "changePercent": "1.45",
+    "volume": "58204500",
+    "high24h": "171.24",
+    "low24h": "168.75"
+  },
+  {
+    "symbol": "MSFT",
+    "price": "411.22",
+    "change": "-4.78",
+    "changePercent": "-1.15",
+    "volume": "25136800",
+    "high24h": "416.95",
+    "low24h": "410.25"
+  },
+  {
+    "symbol": "GOOGL",
+    "price": "148.62",
+    "change": "0.87",
+    "changePercent": "0.59",
+    "volume": "18567200",
+    "high24h": "149.20",
+    "low24h": "147.50"
+  },
+  {
+    "symbol": "AMZN",
+    "price": "175.35",
+    "change": "1.25",
+    "changePercent": "0.72",
+    "volume": "32450600",
+    "high24h": "176.45",
+    "low24h": "173.89"
+  },
+  {
+    "symbol": "FB",
+    "price": "486.18",
+    "change": "5.25",
+    "changePercent": "1.09",
+    "volume": "19845200",
+    "high24h": "487.50",
+    "low24h": "480.95"
+  },
+  {
+    "symbol": "TSLA",
+    "price": "175.21",
+    "change": "-2.89",
+    "changePercent": "-1.62",
+    "volume": "108976500",
+    "high24h": "178.75",
+    "low24h": "174.33"
+  },
+  {
+    "symbol": "JPM",
+    "price": "196.85",
+    "change": "1.55",
+    "changePercent": "0.79",
+    "volume": "7654800",
+    "high24h": "197.25",
+    "low24h": "195.40"
+  },
+  {
+    "symbol": "BRK.A",
+    "price": "615245.00",
+    "change": "-2250.00",
+    "changePercent": "-0.36",
+    "volume": "1250",
+    "high24h": "618500.00",
+    "low24h": "614750.00"
+  },
+  {
+    "symbol": "V",
+    "price": "278.36",
+    "change": "0.75",
+    "changePercent": "0.27",
+    "volume": "5789400",
+    "high24h": "279.15",
+    "low24h": "277.52"
+  },
+  {
+    "symbol": "PG",
+    "price": "165.74",
+    "change": "-0.28",
+    "changePercent": "-0.17",
+    "volume": "6235800",
+    "high24h": "166.45",
+    "low24h": "165.22"
+  },
+  {
+    "symbol": "BTC",
+    "price": "58783.25",
+    "change": "1254.75",
+    "changePercent": "2.18",
+    "volume": "36542000000",
+    "high24h": "59120.50",
+    "low24h": "56950.25"
+  },
+  {
+    "symbol": "ETH",
+    "price": "3275.84",
+    "change": "78.45",
+    "changePercent": "2.45",
+    "volume": "21587000000",
+    "high24h": "3295.50",
+    "low24h": "3168.75"
+  },
+  {
+    "symbol": "BNB",
+    "price": "562.35",
+    "change": "15.28",
+    "changePercent": "2.79",
+    "volume": "3854000000",
+    "high24h": "565.75",
+    "low24h": "545.25"
+  },
+  {
+    "symbol": "XRP",
+    "price": "0.5124",
+    "change": "0.0089",
+    "changePercent": "1.77",
+    "volume": "2458000000",
+    "high24h": "0.5175",
+    "low24h": "0.5012"
+  },
+  {
+    "symbol": "DOGE",
+    "price": "0.1285",
+    "change": "0.0042",
+    "changePercent": "3.38",
+    "volume": "1875000000",
+    "high24h": "0.1315",
+    "low24h": "0.1235"
+  }
+]

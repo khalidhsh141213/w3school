@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trade Endpoints Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .test-section {
+      margin-bottom: 20px;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    button {
+      padding: 8px 16px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-right: 10px;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    pre {
+      background-color: #f5f5f5;
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+    }
+    .success {
+      color: green;
+    }
+    .error {
+      color: red;
+    }
+  </style>
+</head>
+<body>
+  <h1>Trade Endpoints Test</h1>
+  
+  <div class="test-section">
+    <h2>Step 1: Login</h2>
+    <div>
+      <label for="username">Username:</label>
+      <input type="text" id="username" value="admin">
+      <label for="password">Password:</label>
+      <input type="password" id="password" value="admin123">
+      <button id="loginBtn">Login</button>
+    </div>
+    <div id="loginResult"></div>
+  </div>
+  
+  <div class="test-section">
+    <h2>Step 2: Open Trade</h2>
+    <div>
+      <label for="symbol">Symbol:</label>
+      <input type="text" id="symbol" value="AAPL">
+      <label for="type">Type:</label>
+      <select id="type">
+        <option value="buy">Buy</option>
+        <option value="sell">Sell</option>
+      </select>
+      <label for="amount">Amount:</label>
+      <input type="number" id="amount" value="10">
+      <button id="openTradeBtn" disabled>Open Trade</button>
+    </div>
+    <div id="openTradeResult"></div>
+  </div>
+  
+  <div class="test-section">
+    <h2>Step 3: Close Trade</h2>
+    <div>
+      <label for="tradeId">Trade ID:</label>
+      <input type="text" id="tradeId">
+      <button id="closeTradeBtn" disabled>Close Trade</button>
+    </div>
+    <div id="closeTradeResult"></div>
+  </div>
+  
+  <script>
+    // Base URL for the API
+    const BASE_URL = window.location.origin;
+    let tradeId = null;
+    
+    // Login button
+    document.getElementById('loginBtn').addEventListener('click', async () => {
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const loginResult = document.getElementById('loginResult');
+      
+      try {
+        loginResult.innerHTML = 'Logging in...';
+        
+        const response = await fetch(`${BASE_URL}/api/auth/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ username, password }),
+          credentials: 'include'
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+          loginResult.innerHTML = `<p class="success">Login successful!</p><pre>${JSON.stringify(data, null, 2)}</pre>`;
+          document.getElementById('openTradeBtn').disabled = false;
+        } else {
+          loginResult.innerHTML = `<p class="error">Login failed: ${data.message || 'Unknown error'}</p>`;
+        }
+      } catch (error) {
+        loginResult.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+      }
+    });
+    
+    // Open trade button
+    document.getElementById('openTradeBtn').addEventListener('click', async () => {
+      const symbol = document.getElementById('symbol').value;
+      const type = document.getElementById('type').value;
+      const amount = document.getElementById('amount').value;
+      const openTradeResult = document.getElementById('openTradeResult');
+      
+      try {
+        openTradeResult.innerHTML = 'Opening trade...';
+        
+        const response = await fetch(`${BASE_URL}/api/trade/open`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ symbol, type, amount: parseFloat(amount) }),
+          credentials: 'include'
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          tradeId = data.id;
+          document.getElementById('tradeId').value = tradeId;
+          document.getElementById('closeTradeBtn').disabled = false;
+          openTradeResult.innerHTML = `<p class="success">Trade opened successfully!</p><pre>${JSON.stringify(data, null, 2)}</pre>`;
+        } else {
+          try {
+            const errorData = await response.json();
+            openTradeResult.innerHTML = `<p class="error">Failed to open trade: ${errorData.message || 'Unknown error'}</p>`;
+          } catch {
+            openTradeResult.innerHTML = `<p class="error">Failed to open trade: ${response.statusText}</p>`;
+          }
+        }
+      } catch (error) {
+        openTradeResult.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+      }
+    });
+    
+    // Close trade button
+    document.getElementById('closeTradeBtn').addEventListener('click', async () => {
+      const tradeIdInput = document.getElementById('tradeId').value;
+      const closeTradeResult = document.getElementById('closeTradeResult');
+      
+      try {
+        closeTradeResult.innerHTML = 'Closing trade...';
+        
+        const response = await fetch(`${BASE_URL}/api/trade/close`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ tradeId: tradeIdInput }),
+          credentials: 'include'
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          closeTradeResult.innerHTML = `<p class="success">Trade closed successfully!</p><pre>${JSON.stringify(data, null, 2)}</pre>`;
+        } else {
+          try {
+            const errorData = await response.json();
+            closeTradeResult.innerHTML = `<p class="error">Failed to close trade: ${errorData.message || 'Unknown error'}</p>`;
+          } catch {
+            closeTradeResult.innerHTML = `<p class="error">Failed to close trade: ${response.statusText}</p>`;
+          }
+        }
+      } catch (error) {
+        closeTradeResult.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+      }
+    });
+  </script>
+</body>
+</html>

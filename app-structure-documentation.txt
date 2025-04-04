@@ -1,0 +1,381 @@
+# توثيق هيكلة التطبيق الشامل
+
+## 1. هيكل الملفات الأساسية
+
+### الملفات الجذرية
+- package.json - تكوين التطبيق والتبعيات
+- tsconfig.json - تكوين TypeScript
+- tailwind.config.ts - تكوين Tailwind CSS
+- drizzle.config.ts - تكوين Drizzle ORM
+- vite.config.ts - تكوين Vite
+- .env.development - متغيرات البيئة للتطوير
+
+### مجلدات التطبيق الرئيسية
+
+#### /server - ملفات الخادم (Backend)
+- server/index.ts - نقطة دخول الخادم
+- server/routes.ts - تعريف جميع نقاط النهاية API
+- server/db.ts - اتصال قاعدة البيانات
+- server/storage.ts - واجهات التخزين (DatabaseStorage)
+- server/auth.ts - المصادقة والتفويض
+- server/cache.ts - التخزين المؤقت
+- server/health.ts - مراقبة حالة التطبيق
+- server/validation.ts - التحقق من صحة الطلبات
+- server/websocket.ts - تكامل WebSocket
+
+#### /server/routes - المسارات المنظمة
+- server/routes/admin/index.js - نقاط نهاية المشرف
+- server/routes/trade.ts - نقاط نهاية التداول
+- server/routes/bonus.js - نقاط نهاية المكافآت
+- server/routes/economic-calendar.js - نقاط نهاية التقويم الاقتصادي
+
+#### /server/services - خدمات الخادم
+- server/services/market-data-service.js - خدمة بيانات السوق
+- server/services/notificationService.js - خدمة الإشعارات
+- server/services/errorHandlingService.js - خدمة معالجة الأخطاء
+
+#### /shared - الملفات المشتركة بين الخادم والعميل
+- shared/schema.ts - تعريفات المخطط والأنواع المشتركة
+
+#### /client - ملفات العميل (Frontend)
+- client/src/App.tsx - مكون التطبيق الرئيسي
+- client/src/main.tsx - نقطة دخول العميل
+- client/src/config/api.ts - تكوين طلبات API
+
+#### /client/src/components - مكونات واجهة المستخدم
+- client/src/components/ui - مكونات واجهة المستخدم الأساسية (shadcn/ui)
+- client/src/components/trading - مكونات خاصة بالتداول
+- client/src/components/admin - مكونات لوحة تحكم المشرف
+
+#### /client/src/pages - صفحات التطبيق
+- client/src/pages/dashboard.tsx - صفحة لوحة التحكم
+- client/src/pages/login.tsx - صفحة تسجيل الدخول
+- client/src/pages/register.tsx - صفحة التسجيل
+- client/src/pages/trade.tsx - صفحة التداول
+- client/src/pages/portfolio.tsx - صفحة المحفظة
+- client/src/pages/economic-calendar.tsx - صفحة التقويم الاقتصادي
+- client/src/pages/admin - صفحات لوحة تحكم المشرف
+
+#### /client/src/context - سياقات React
+- client/src/context/AuthContext.tsx - سياق المصادقة
+- client/src/context/SocketContext.tsx - سياق WebSocket
+
+#### /client/src/hooks - خطافات React المخصصة
+- client/src/hooks/use-toast.ts - خطاف لإشعارات التوست
+
+#### /drizzle - ملفات وترحيلات Drizzle ORM
+- drizzle/migrations - ترحيلات قاعدة البيانات
+
+---
+
+## 2. نقاط النهاية (API Endpoints)
+
+### نقاط نهاية المصادقة
+- POST /api/auth/login - تسجيل الدخول
+- POST /api/auth/logout - تسجيل الخروج
+- POST /api/auth/register - تسجيل مستخدم جديد
+- POST /api/auth/change-password - تغيير كلمة المرور
+
+### نقاط نهاية المستخدم
+- GET /api/user - الحصول على بيانات المستخدم الحالي
+- GET /api/user/:id - الحصول على بيانات مستخدم محدد
+- PATCH /api/user/:id - تحديث بيانات مستخدم
+- PATCH /api/user/profile - تحديث الملف الشخصي للمستخدم الحالي
+- GET /api/user-settings - الحصول على إعدادات المستخدم الحالي
+- GET /api/user-settings/:id - الحصول على إعدادات مستخدم محدد
+- POST /api/user-settings - تحديث إعدادات المستخدم
+
+### نقاط نهاية التداول
+- POST /api/trade/open - فتح صفقة جديدة
+- POST /api/trade/close - إغلاق صفقة
+- POST /api/trade/check-conditions - فحص شروط وقف الخسارة وجني الأرباح
+- GET /api/trades - الحصول على صفقات المستخدم الحالي
+- GET /api/trades/user/:id - الحصول على صفقات مستخدم محدد
+- GET /api/trades/recent - الحصول على أحدث الصفقات
+- POST /api/trades - إنشاء صفقة جديدة (مماثلة لـ /api/trade/open)
+
+### نقاط نهاية المحفظة
+- GET /api/portfolio - الحصول على محفظة المستخدم الحالي
+- GET /api/portfolio-details - تفاصيل محفظة المستخدم الحالي
+- GET /api/watchlist - الحصول على قائمة المراقبة للمستخدم
+- POST /api/watchlist - إضافة رمز إلى قائمة المراقبة
+
+### نقاط نهاية بيانات السوق
+- GET /api/market-data - الحصول على بيانات السوق الحالية
+- PUT /api/market-data - تحديث بيانات السوق
+- GET /api/assets - الحصول على قائمة الأصول المتاحة
+- GET /api/assets/trending - الحصول على الأصول الرائجة
+- GET /api/assets/featured - الحصول على الأصول المميزة
+- GET /api/assets/movers - الحصول على أكبر المتحركين في السوق
+- GET /api/assets/live - الحصول على بيانات الأصول في الوقت الفعلي
+- GET /api/assets/:symbol - الحصول على معلومات أصل محدد
+- GET /api/price-history/:symbol - الحصول على تاريخ أسعار أصل محدد
+- GET /api/analysis/:symbol - الحصول على تحليل لأصل محدد
+
+### نقاط نهاية التقويم الاقتصادي
+- GET /api/economic-events - الحصول على الأحداث الاقتصادية
+- GET /api/economic-events/range - الحصول على الأحداث الاقتصادية ضمن نطاق زمني
+
+### نقاط نهاية الصحة والمراقبة
+- GET /api/health - التحقق من صحة التطبيق
+- GET /api/health/simple - فحص صحة بسيط
+- GET /api/ai/health - فحص صحة خدمة الذكاء الاصطناعي
+
+### نقاط نهاية المشرف
+- GET /api/admin/metrics - مقاييس لوحة التحكم
+- GET /api/admin/users - الحصول على قائمة المستخدمين
+- GET /api/admin/kyc - الحصول على طلبات KYC
+- GET /api/admin/trades - الحصول على جميع الصفقات
+- GET /api/admin/error-stats - إحصائيات الأخطاء
+- GET /api/admin/recent-errors - الأخطاء الأخيرة
+- POST /api/admin/reset-error-stats - إعادة تعيين إحصائيات الأخطاء
+- GET /api/admin/cache-stats - إحصائيات التخزين المؤقت
+- POST /api/admin/clear-cache - مسح التخزين المؤقت
+
+---
+
+## 3. هيكل قاعدة البيانات
+
+### جداول قاعدة البيانات
+
+#### جدول users - المستخدمين
+- id - معرف فريد
+- username - اسم المستخدم
+- password - كلمة المرور المشفرة
+- email - البريد الإلكتروني
+- fullName - الاسم الكامل
+- phoneNumber - رقم الهاتف
+- profilePictureUrl - رابط صورة الملف الشخصي
+- isVerified - حالة التحقق
+- verificationStatus - حالة التحقق التفصيلية
+- verificationNotes - ملاحظات التحقق
+- country - البلد
+- city - المدينة
+- address - العنوان
+- userRole - دور المستخدم (admin, user)
+- languagePreference - تفضيل اللغة
+- currencyPreference - تفضيل العملة
+- themePreference - تفضيل المظهر
+- notificationPreference - تفضيلات الإشعارات
+- privacySettings - إعدادات الخصوصية
+- interfaceSettings - إعدادات الواجهة
+- balance - الرصيد
+- bonusBalance - رصيد المكافآت
+- referralCode - رمز الإحالة
+- referredBy - معرف من قام بالإحالة
+- createdAt - تاريخ الإنشاء
+- updatedAt - تاريخ التحديث
+
+#### جدول trades - الصفقات
+- id - معرف فريد
+- userId - معرف المستخدم (مفتاح خارجي لجدول users)
+- symbol - رمز الأصل
+- type - نوع الصفقة (buy, sell)
+- shares - عدد الأسهم/الوحدات
+- price - سعر الدخول
+- total - المبلغ الإجمالي
+- commission - العمولة
+- tradeDate - تاريخ فتح الصفقة
+- status - حالة الصفقة (open, closed)
+- closedAt - تاريخ إغلاق الصفقة
+- closePrice - سعر الإغلاق
+- stopLoss - سعر وقف الخسارة
+- takeProfit - سعر جني الأرباح
+- closedBy - سبب الإغلاق (manual, stop_loss, take_profit)
+
+#### جدول portfolio - المحفظة
+- id - معرف فريد
+- userId - معرف المستخدم
+- symbol - رمز الأصل
+- shares - عدد الأسهم/الوحدات
+- averagePrice - متوسط سعر الشراء
+- currentPrice - السعر الحالي
+- value - القيمة الحالية
+- lastUpdated - آخر تحديث
+
+#### جدول portfolioSummary - ملخص المحفظة
+- id - معرف فريد
+- userId - معرف المستخدم
+- totalValue - القيمة الإجمالية
+- changePercent - نسبة التغيير
+- profitLoss - الربح/الخسارة
+- holdings - تفاصيل الأصول المملوكة
+- lastUpdated - آخر تحديث
+
+#### جدول watchlist - قائمة المراقبة
+- id - معرف فريد
+- userId - معرف المستخدم
+- symbol - رمز الأصل
+- addedAt - تاريخ الإضافة
+
+#### جدول assets - الأصول المتاحة
+- id - معرف فريد
+- symbol - رمز الأصل
+- name - اسم الأصل
+- type - نوع الأصل (stock, forex, crypto)
+- sector - القطاع
+- exchange - البورصة
+- logoUrl - رابط الشعار
+- description - وصف الأصل
+- lastPrice - آخر سعر
+- change - مقدار التغيير
+- changePercent - نسبة التغيير
+- volume - حجم التداول
+- marketCap - القيمة السوقية
+- price - السعر (بديل عن lastPrice)
+- updatedAt - آخر تحديث
+
+#### جدول marketData - بيانات السوق
+- id - معرف فريد
+- symbol - رمز الأصل
+- price - السعر الحالي
+- change - التغيير
+- changePercent - نسبة التغيير
+- volume - حجم التداول
+- bid - سعر العرض
+- ask - سعر الطلب
+- timestamp - طابع زمني
+- data - بيانات إضافية
+
+#### جدول priceHistory - تاريخ الأسعار
+- id - معرف فريد
+- symbol - رمز الأصل
+- timestamp - طابع زمني
+- open - سعر الافتتاح
+- high - أعلى سعر
+- low - أدنى سعر
+- close - سعر الإغلاق
+- volume - حجم التداول
+- interval - الفاصل الزمني
+
+#### جدول economicEvents - الأحداث الاقتصادية
+- id - معرف فريد
+- eventName - اسم الحدث
+- eventDate - تاريخ الحدث
+- releaseDate - تاريخ الإصدار
+- country - البلد
+- impact - التأثير
+- actual - القيمة الفعلية
+- forecast - القيمة المتوقعة
+- previous - القيمة السابقة
+- description - وصف الحدث
+- currency - العملة المرتبطة
+- source - مصدر البيانات
+
+#### جدول aiAnalysis - تحليلات الذكاء الاصطناعي
+- id - معرف فريد
+- symbol - رمز الأصل
+- timestamp - طابع زمني
+- prediction - التنبؤ
+- confidence - مستوى الثقة
+- direction - اتجاه الحركة المتوقعة
+- analysis - تحليل مفصل
+- dataPoints - نقاط البيانات المستخدمة
+- timeframe - الإطار الزمني للتنبؤ
+
+#### جدول sessions - جلسات المستخدمين
+- sid - معرف الجلسة
+- sess - بيانات الجلسة (JSON)
+- expire - تاريخ انتهاء الصلاحية
+
+#### جدول transactions - المعاملات المالية
+- id - معرف فريد
+- userId - معرف المستخدم
+- type - نوع المعاملة
+- amount - المبلغ
+- currency - العملة
+- status - الحالة
+- reference - مرجع المعاملة
+- timestamp - طابع زمني
+
+#### جدول kycDocuments - وثائق التحقق من الهوية
+- id - معرف فريد
+- userId - معرف المستخدم
+- type - نوع الوثيقة
+- status - حالة التحقق
+- documentUrl - رابط الوثيقة
+- submitDate - تاريخ التقديم
+- updatedAt - تاريخ التحديث
+- adminNotes - ملاحظات المشرف
+
+---
+
+## 4. العلاقات بين جداول قاعدة البيانات
+
+1. **علاقة المستخدم والصفقات**:
+   - جدول users → جدول trades (علاقة 1:N)
+   - كل مستخدم يمكن أن يكون لديه عدة صفقات
+
+2. **علاقة المستخدم والمحفظة**:
+   - جدول users → جدول portfolio (علاقة 1:N)
+   - كل مستخدم يمكن أن يكون لديه عدة أصول في المحفظة
+
+3. **علاقة المستخدم وملخص المحفظة**:
+   - جدول users → جدول portfolioSummary (علاقة 1:1)
+   - كل مستخدم لديه ملخص محفظة واحد
+
+4. **علاقة المستخدم وقائمة المراقبة**:
+   - جدول users → جدول watchlist (علاقة 1:N)
+   - كل مستخدم يمكن أن يكون لديه عدة أصول في قائمة المراقبة
+
+5. **علاقة الأصول وتاريخ الأسعار**:
+   - جدول assets → جدول priceHistory (علاقة 1:N)
+   - كل أصل لديه سجل تاريخي للأسعار
+
+6. **علاقة الأصول وبيانات السوق**:
+   - جدول assets → جدول marketData (علاقة 1:1)
+   - كل أصل لديه بيانات سوق حالية
+
+7. **علاقة الأصول وتحليلات الذكاء الاصطناعي**:
+   - جدول assets → جدول aiAnalysis (علاقة 1:N)
+   - كل أصل يمكن أن يكون لديه عدة تحليلات
+
+8. **علاقة المستخدم والمعاملات المالية**:
+   - جدول users → جدول transactions (علاقة 1:N)
+   - كل مستخدم يمكن أن يكون لديه عدة معاملات مالية
+
+9. **علاقة المستخدم ووثائق التحقق**:
+   - جدول users → جدول kycDocuments (علاقة 1:N)
+   - كل مستخدم يمكن أن يكون لديه عدة وثائق تحقق من الهوية
+
+---
+
+## 5. خصائص التطبيق الرئيسية
+
+### ميزات المستخدم العام
+1. **التسجيل وتسجيل الدخول** - إنشاء حساب وتسجيل الدخول
+2. **التداول** - فتح وإغلاق الصفقات مع وقف الخسارة وجني الأرباح
+3. **المحفظة** - عرض وإدارة الأصول
+4. **قائمة المراقبة** - متابعة أصول محددة
+5. **الأحداث الاقتصادية** - عرض التقويم الاقتصادي والأحداث القادمة
+6. **بيانات السوق المباشرة** - عرض أسعار وبيانات الأصول في الوقت الفعلي
+7. **التحليلات** - تحليلات مدعومة بالذكاء الاصطناعي للأصول
+
+### ميزات المشرف
+1. **إدارة المستخدمين** - عرض وإدارة حسابات المستخدمين
+2. **إدارة KYC** - التحقق من وثائق التحقق من الهوية
+3. **مراقبة الصفقات** - مراقبة جميع الصفقات في النظام
+4. **إحصائيات النظام** - عرض أداء النظام وإحصائيات الأخطاء
+5. **إدارة التخزين المؤقت** - مراقبة ومسح التخزين المؤقت للنظام
+
+### تكامل WebSocket
+1. **بيانات السوق المباشرة** - استلام تحديثات أسعار الأصول في الوقت الفعلي
+2. **إشعارات** - إشعارات في الوقت الفعلي للمستخدمين
+3. **تنبيهات الأحداث الاقتصادية** - تنبيهات بالأحداث الاقتصادية المقبلة والمنشورة
+
+### تكامل Polygon.io
+1. **بيانات الأسهم** - أسعار الأسهم والبيانات المالية
+2. **بيانات العملات المشفرة** - أسعار العملات المشفرة وتحديثات السوق
+3. **بيانات الفوركس** - أسعار صرف العملات والتحديثات
+
+### ميزات الأمان
+1. **مصادقة المستخدم** - معالجة تسجيل الدخول وتسجيل الخروج
+2. **تشفير كلمات المرور** - تخزين آمن لكلمات المرور
+3. **جلسات المستخدم** - إدارة جلسات المستخدمين
+4. **KYC والتحقق** - التحقق من هوية المستخدم
+
+### ميزات أخرى
+1. **متعدد اللغات** - دعم للعديد من اللغات
+2. **تفضيلات المستخدم** - تخصيص واجهة المستخدم واللغة والعملة
+3. **إشعارات** - إشعارات للأحداث والصفقات والتنبيهات
+4. **التنبيهات السعرية** - تنبيهات عند وصول الأصول لأسعار محددة

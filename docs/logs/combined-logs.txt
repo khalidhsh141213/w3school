@@ -1,0 +1,34 @@
+==== Application Logs ====
+[From server-log.txt]
+4:48:42 PM [polygon] Using Polygon API key: 4uXK...
+Running database migrations...
+Migration started...
+[... server log content ...]
+
+==== Error Logs ====
+[Server Startup Errors]
+Error: listen EADDRINUSE: address already in use 0.0.0.0:5000
+ReferenceError: require is not defined in ES module scope
+
+[Database Errors]
+PostgresError: invalid input syntax for type uuid: "trending"
+
+==== Database Connection Logs ====
+Connecting to database with:
+- Host: ep-muddy-queen-a4iyzzd6.us-east-1.aws.neon.tech
+- Database: neondb
+- User: neondb_owner
+- Port: 5432
+- SSL Mode: require
+Database connection successful! ✅
+Current database time: Thu Mar 27 2025 16:48:00 GMT+0000 (Coordinated Universal Time)
+
+==== Session Data ====
+# Netscape HTTP Cookie File
+#HttpOnly_localhost	FALSE	/	FALSE	1742654122	connect.sid	s%3AzvSKLA0aJG1pSjyDFbsjbNXvgVKFvCOQ.tZraCXqmJhKdGDe6MHdwPmKxc7NbJ106bUtiBvcqqJA
+
+==== Market Data Updates ====
+4:48:45 PM [marketData] Subscription batch processor started with 3000ms interval
+4:48:45 PM [marketData] Found crypto price updater
+4:48:45 PM [marketData] Market data service initialized
+[... market data updates ...] 

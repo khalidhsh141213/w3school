@@ -1,0 +1,11 @@
+Connecting to database with:
+- Host: ep-muddy-queen-a4iyzzd6.us-east-1.aws.neon.tech
+- Database: neondb
+- User: neondb_owner
+- Port: 5432
+- SSL Mode: require
+- Connection String: postgresql://neondb_owner:***@ep-muddy-queen-a4iyzzd6.us-east-1.aws.neon.tech/neondb?sslmode=require
+Attempting to connect to database...
+Database connection successful! ✅
+Current database time: Thu Mar 27 2025 16:48:00 GMT+0000 (Coordinated Universal Time)
+Connection test complete ✅

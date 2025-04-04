@@ -1,0 +1,122 @@
+[
+  {
+    "symbol": "AAPL",
+    "timestamp": "2025-03-27T16:00:00Z",
+    "open": "168.45",
+    "high": "171.24",
+    "low": "168.25",
+    "close": "170.89",
+    "volume": "58204500",
+    "interval": "1d"
+  },
+  {
+    "symbol": "AAPL",
+    "timestamp": "2025-03-26T16:00:00Z",
+    "open": "169.95",
+    "high": "170.12",
+    "low": "167.85",
+    "close": "168.44",
+    "volume": "62345800",
+    "interval": "1d"
+  },
+  {
+    "symbol": "AAPL",
+    "timestamp": "2025-03-25T16:00:00Z",
+    "open": "167.50",
+    "high": "170.25",
+    "low": "167.10",
+    "close": "169.95",
+    "volume": "54286700",
+    "interval": "1d"
+  },
+  {
+    "symbol": "MSFT",
+    "timestamp": "2025-03-27T16:00:00Z",
+    "open": "416.25",
+    "high": "416.95",
+    "low": "410.25",
+    "close": "411.22",
+    "volume": "25136800",
+    "interval": "1d"
+  },
+  {
+    "symbol": "MSFT",
+    "timestamp": "2025-03-26T16:00:00Z",
+    "open": "415.50",
+    "high": "418.75",
+    "low": "414.85",
+    "close": "416.00",
+    "volume": "21456900",
+    "interval": "1d"
+  },
+  {
+    "symbol": "MSFT",
+    "timestamp": "2025-03-25T16:00:00Z",
+    "open": "412.00",
+    "high": "416.45",
+    "low": "411.25",
+    "close": "415.50",
+    "volume": "19875400",
+    "interval": "1d"
+  },
+  {
+    "symbol": "BTC",
+    "timestamp": "2025-03-27T23:59:59Z",
+    "open": "57250.50",
+    "high": "59120.50",
+    "low": "56950.25",
+    "close": "58783.25",
+    "volume": "36542000000",
+    "interval": "1d"
+  },
+  {
+    "symbol": "BTC",
+    "timestamp": "2025-03-26T23:59:59Z",
+    "open": "58100.25",
+    "high": "58950.75",
+    "low": "56500.50",
+    "close": "57250.50",
+    "volume": "42315000000",
+    "interval": "1d"
+  },
+  {
+    "symbol": "BTC",
+    "timestamp": "2025-03-25T23:59:59Z",
+    "open": "56250.75",
+    "high": "58750.25",
+    "low": "55750.25",
+    "close": "58100.25",
+    "volume": "41250000000",
+    "interval": "1d"
+  },
+  {
+    "symbol": "ETH",
+    "timestamp": "2025-03-27T23:59:59Z",
+    "open": "3190.25",
+    "high": "3295.50",
+    "low": "3168.75",
+    "close": "3275.84",
+    "volume": "21587000000",
+    "interval": "1d"
+  },
+  {
+    "symbol": "ETH",
+    "timestamp": "2025-03-26T23:59:59Z",
+    "open": "3140.50",
+    "high": "3225.75",
+    "low": "3125.25",
+    "close": "3190.25",
+    "volume": "18654000000",
+    "interval": "1d"
+  },
+  {
+    "symbol": "ETH",
+    "timestamp": "2025-03-25T23:59:59Z",
+    "open": "3050.25",
+    "high": "3158.50",
+    "low": "3025.75",
+    "close": "3140.50",
+    "volume": "19825000000",
+    "interval": "1d"
+  }
+]

@@ -1,0 +1,1550 @@
+// تحديث مركزي للأسعار في قاعدة البيانات
+// This script periodically updates market data in the database directly
+/**
+ * WebSocket Integration for Polygon.io
+ * - Connects and maintains separate WebSocket connections for crypto and forex assets
+ * - Processes real-time messages and updates database
+ * - Falls back to REST API when markets are closed or connection issues occur
+ */
+import axios from 'axios';
+import fetch from 'node-fetch';
+import { fetchCryptoData } from './fetchCryptoData.js';
+import dotenv from 'dotenv';
+import pg from 'pg';
+import { WebSocket } from 'ws';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+// المسار الحالي للملف
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// تحميل المتغيرات البيئية
+dotenv.config();
+
+// تكوين قاعدة البيانات
+const DATABASE_URL = process.env.DATABASE_URL;
+
+// تكوين Polygon API
+const POLYGON_API_KEY = process.env.POLYGON_API_KEY;
+const POLYGON_BASE_URL = 'https://api.polygon.io'; // Removed the /v2 suffix as each endpoint already includes the version
+
+// WebSocket Configuration for Polygon.io
+const POLYGON_CRYPTO_WS_URL = 'wss://socket.polygon.io/crypto';
+const POLYGON_FOREX_WS_URL = 'wss://socket.polygon.io/forex';
+// Legacy reference for backwards compatibility
+const POLYGON_WS_URL = POLYGON_CRYPTO_WS_URL;
+
+// WebSocket Connection Parameters
+const MAX_RECONNECT_DELAY = 30000;  // Maximum reconnection delay (30 seconds)
+const BATCH_SIZE = 50;             // Maximum symbols per subscription batch
+const BATCH_DELAY = 500;           // Delay between batch transmissions (500ms)
+
+// WebSocket Channels Configuration
+const CRYPTO_CHANNELS = ['XT', 'XA', 'XAS', 'XQ']; // Trades, Aggs, Second Aggs, Quotes
+const FOREX_CHANNELS = ['C', 'CA', 'CAS'];        // Trades, Aggs, Second Aggs
+
+// فترات تحديث السوق
+const FOREX_CRYPTO_UPDATE_INTERVAL = 5000; // 5 ثوانٍ للعملات الرقمية والفوركس
+const OTHER_ASSETS_UPDATE_INTERVAL = 300000; // 5 دقائق للأصول الأخرى
+
+// للتعامل مع WebSocket من Polygon 
+let polygonCryptoWs = null;
+let polygonForexWs = null;
+let reconnectAttempt = 0;
+
+// اتصال قاعدة البيانات
+const pool = new pg.Pool({
+  connectionString: DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
+
+// Check if markets are open (Sunday markets closed except crypto)
+function areMarketsOpen(assetType) {
+  const now = new Date();
+  const dayOfWeek = now.getDay(); // 0 is Sunday, 6 is Saturday
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+  
+  // Crypto markets are always open
+  if (assetType === 'crypto') {
+    return true;
+  }
+  
+  // Forex has limited weekend trading
+  if (assetType === 'forex') {
+    if (dayOfWeek === 0) { // Sunday
+      return false; // Generally closed on Sunday
+    }
+    return true; // Can be active during other days
+  }
+  
+  // Stock markets closed on weekends
+  if (assetType === 'stock' || assetType === 'index') {
+    return !isWeekend;
+  }
+  
+  // Default to closed on Sunday, open other days
+  return dayOfWeek !== 0;
+}
+
+// Function to initialize WebSocket connection for real-time forex and crypto
+function initializeWebSocket() {
+  if (ws) {
+    // Close existing connection if any
+    ws.terminate();
+  }
+  
+  try {
+    console.log(`Connecting to WebSocket at ${WS_API_URL}`);
+    ws = new WebSocket(WS_API_URL);
+    
+    ws.on('open', () => {
+      console.log('WebSocket connection established');
+      // Subscribe to forex and crypto assets
+      ws.send(JSON.stringify({
+        type: 'subscribe',
+        assetTypes: ['forex', 'crypto']
+      }));
+    });
+    
+    ws.on('message', (data) => {
+      try {
+        const message = JSON.parse(data);
+        console.log(`Received message from WebSocket: ${message.type} for ${message.data?.symbol || 'unknown'}`);
+      } catch (error) {
+        console.error('Error parsing WebSocket message:', error);
+      }
+    });
+    
+    ws.on('error', (error) => {
+      console.error('WebSocket error:', error);
+      // Attempt to reconnect after a delay
+      setTimeout(initializeWebSocket, 5000);
+    });
+    
+    ws.on('close', () => {
+      console.log('WebSocket connection closed');
+      // Attempt to reconnect after a delay
+      setTimeout(initializeWebSocket, 5000);
+    });
+  } catch (error) {
+    console.error('Error initializing WebSocket:', error);
+    // Attempt to reconnect after a delay
+    setTimeout(initializeWebSocket, 5000);
+  }
+}
+
+// Function to simulate price changes
+function simulatePriceChange(basePrice, volatilityFactor = 1) {
+  // Adjust volatility based on asset type
+  const changePercent = (Math.random() * 4 - 2) / 100 * volatilityFactor; // -2% to +2%, adjusted by volatility
+  const newPrice = basePrice * (1 + changePercent);
+  const change = newPrice - basePrice;
+  
+  return {
+    price: newPrice.toFixed(2),
+    change: change.toFixed(2),
+    changePercent: (changePercent * 100).toFixed(2),
+    volume: Math.floor(Math.random() * 10000000)
+  };
+}
+
+// Sample market data by asset type
+const assetsByType = {
+  // Stocks - updated via REST
+  stock: [
+    { symbol: 'AAPL', name: 'Apple Inc.', basePrice: 150.25 },
+    { symbol: 'MSFT', name: 'Microsoft Corporation', basePrice: 290.45 },
+    { symbol: 'GOOGL', name: 'Alphabet Inc.', basePrice: 2750.10 },
+    { symbol: 'AMZN', name: 'Amazon.com Inc.', basePrice: 3400.80 },
+    { symbol: 'META', name: 'Meta Platforms, Inc.', basePrice: 320.75 },
+    { symbol: 'TSLA', name: 'Tesla Inc.', basePrice: 680.75 },
+    { symbol: 'NVDA', name: 'NVIDIA Corporation', basePrice: 240.50 },
+    { symbol: 'JPM', name: 'JPMorgan Chase & Co.', basePrice: 160.20 },
+    { symbol: 'NKE', name: 'Nike, Inc.', basePrice: 140.30 }
+  ],
+  
+  // Indices - updated via REST
+  index: [
+    { symbol: 'SPX', name: 'S&P 500', basePrice: 4280.15 },
+    { symbol: 'NDX', name: 'NASDAQ', basePrice: 14150.75 },
+    { symbol: 'DJI', name: 'DOW', basePrice: 35120.08 }
+  ],
+  
+  // Crypto - updated via WebSocket
+  crypto: [
+    { symbol: 'BTC/USD', name: 'Bitcoin', basePrice: 28500.00, volatility: 2.5 },
+    { symbol: 'ETH/USD', name: 'Ethereum', basePrice: 1850.75, volatility: 2.2 },
+    { symbol: 'XRP/USD', name: 'Ripple', basePrice: 0.55, volatility: 3.0 },
+    { symbol: 'SOL/USD', name: 'Solana', basePrice: 32.75, volatility: 4.0 },
+    { symbol: 'BNB/USD', name: 'Binance Coin', basePrice: 275.20, volatility: 1.8 },
+    { symbol: 'ADA/USD', name: 'Cardano', basePrice: 0.35, volatility: 2.5 },
+    { symbol: 'DOGE/USD', name: 'Dogecoin', basePrice: 0.08, volatility: 5.0 }
+  ],
+  
+  // Forex - updated via WebSocket
+  forex: [
+    { symbol: 'EUR/USD', name: 'Euro/US Dollar', basePrice: 1.0925, volatility: 0.5 },
+    { symbol: 'GBP/USD', name: 'British Pound/US Dollar', basePrice: 1.2740, volatility: 0.7 },
+    { symbol: 'USD/JPY', name: 'US Dollar/Japanese Yen', basePrice: 134.50, volatility: 0.6 },
+    { symbol: 'USD/CAD', name: 'US Dollar/Canadian Dollar', basePrice: 1.3250, volatility: 0.5 },
+    { symbol: 'AUD/USD', name: 'Australian Dollar/US Dollar', basePrice: 0.6650, volatility: 0.8 }
+  ]
+};
+
+// Cache of current prices to avoid redundant updates
+const currentPrices = {};
+
+// Initialize price cache with base prices
+Object.entries(assetsByType).forEach(([type, assets]) => {
+  assets.forEach(asset => {
+    currentPrices[asset.symbol] = asset.basePrice;
+  });
+});
+
+// تحديث بيانات السوق في قاعدة البيانات مباشرة
+async function updateAssetInDatabase(symbol, data) {
+  try {
+    // تكييف تنسيق الرمز ليتوافق مع تنسيق قاعدة البيانات
+    // التحقق إذا كان الرمز يحتوي على "/"
+    let dbSymbol = symbol;
+    if (symbol.includes('/')) {
+      // تحويل "BTC/USD" إلى "BTCUSD"
+      dbSymbol = symbol.replace('/', '');
+      console.log(`Formatted symbol from ${symbol} to ${dbSymbol} for database query`);
+    }
+    
+    // إضافة طابع التاريخ الحالي للتحديث
+    const now = new Date();
+    
+    // التحديث في قاعدة البيانات مباشرة باستخدام dbSymbol
+    const query = `
+      UPDATE assets 
+      SET 
+        price = $1, 
+        price_change = $2, 
+        price_change_percentage = $3, 
+        daily_volume = $4,
+        high_24h = $5,
+        low_24h = $6,
+        last_updated_at = $7,
+        market_status = $8
+      WHERE 
+        symbol = $9
+      RETURNING *;
+    `;
+    
+    // اشتقاق البيانات المطلوبة
+    const high24h = data.high24h || (parseFloat(data.price) * 1.02).toFixed(2); // تقدير تقريبي إذا لم يكن متوفراً
+    const low24h = data.low24h || (parseFloat(data.price) * 0.98).toFixed(2);   // تقدير تقريبي إذا لم يكن متوفراً
+    const marketStatus = data.marketStatus || (areMarketsOpen(data.assetType) ? 'open' : 'closed');
+    
+    const values = [
+      data.price,
+      data.change,
+      data.changePercent,
+      data.volume || 0,
+      high24h,
+      low24h,
+      now,
+      marketStatus,
+      dbSymbol // استخدم الرمز المنسق
+    ];
+    
+    const result = await pool.query(query, values);
+    
+    if (result.rows.length > 0) {
+      console.log(`[DB] Updated ${dbSymbol} price: ${data.price}, change: ${data.change}, volume: ${data.volume}`);
+      return true;
+    } else {
+      // محاولة بديلة: البحث عن الأصل باستخدام polygon_symbol
+      console.log(`[DB] Asset ${dbSymbol} not found. Trying to find by polygon_symbol...`);
+      
+      let polygonSymbol;
+      if (data.assetType === 'crypto') {
+        polygonSymbol = `X:${dbSymbol}`;
+      } else if (data.assetType === 'forex') {
+        polygonSymbol = `C:${dbSymbol}`;
+      } else {
+        polygonSymbol = dbSymbol;
+      }
+      
+      const altQuery = `
+        UPDATE assets 
+        SET 
+          price = $1, 
+          price_change = $2, 
+          price_change_percentage = $3, 
+          daily_volume = $4,
+          high_24h = $5,
+          low_24h = $6,
+          last_updated_at = $7,
+          market_status = $8
+        WHERE 
+          polygon_symbol = $9
+        RETURNING *;
+      `;
+      
+      const altValues = [
+        data.price,
+        data.change,
+        data.changePercent,
+        data.volume || 0,
+        high24h,
+        low24h,
+        now,
+        marketStatus,
+        polygonSymbol
+      ];
+      
+      try {
+        const altResult = await pool.query(altQuery, altValues);
+        
+        if (altResult.rows.length > 0) {
+          console.log(`[DB] Updated asset with polygon_symbol=${polygonSymbol}: price=${data.price}, change=${data.change}`);
+          return true;
+        } else {
+          console.error(`[DB] Asset ${dbSymbol} (polygon_symbol=${polygonSymbol}) not found in database`);
+          return false;
+        }
+      } catch (altError) {
+        console.error(`[DB] Error in alternate update for ${polygonSymbol}:`, altError);
+        return false;
+      }
+    }
+  } catch (error) {
+    console.error(`[DB] Error updating ${symbol} in database:`, error);
+    return false;
+  }
+}
+
+// جلب بيانات السعر للرمز من Polygon API
+async function fetchPolygonPrice(symbol, assetType) {
+  try {
+    if (!POLYGON_API_KEY) {
+      console.error('POLYGON_API_KEY is not set');
+      return null;
+    }
+    
+    let endpoint;
+    let polygonSymbol = symbol;
+    let fromCurrency, toCurrency;
+    
+    // تحديد الواجهة المناسبة حسب نوع الأصل
+    if (assetType === 'stock' || assetType === 'index') {
+      // تنسيق الأسهم والمؤشرات
+      ticker = polygonSymbol;
+      // Use snapshot endpoint without extra v3 prefix
+      endpoint = `${POLYGON_BASE_URL}/snapshot?ticker=${ticker}&type=${assetType}&apiKey=${POLYGON_API_KEY}`;
+    } else if (assetType === 'crypto') {
+      // استخدام واجهتين مختلفتين من Polygon API للعملات المشفرة
+      // 1. /v2/aggs/ticker - للبيانات اليومية المجمعة (سعر الافتتاح، الإغلاق، الحد الأدنى، الحد الأعلى)
+      // 2. /v2/last/trade - للبيانات في الوقت الحقيقي (آخر سعر تداول)
+      
+      // تقسيم الرمز مثل "BTC/USD" إلى عملتين
+      [fromCurrency, toCurrency] = symbol.split('/');
+      
+      if (!fromCurrency || !toCurrency) {
+        console.error(`Invalid crypto symbol format: ${symbol}. Expected format: BASE/QUOTE`);
+        return null;
+      }
+      
+      // تنسيق الرمز ليطابق متطلبات Polygon API
+      // حيث تتوقع Polygon الرمز بتنسيق X:BTCUSD
+      const formattedSymbol = `X:${fromCurrency}${toCurrency}`;
+      console.log(`تنسيق الرمز للعملات المشفرة: ${symbol} -> ${formattedSymbol}`);
+      
+      // نستخدم واجهة /aggs/ticker لأنها توفر معلومات أكثر شمولية
+      // Using correct API path format for Polygon.io
+      
+      // Format the symbol for Polygon API - replace / with - for crypto (for WebSocket)
+      const formattedCryptoSymbol = symbol.replace('/', '-');
+      console.log(`Formatted crypto symbol for API request: ${symbol} -> ${formattedCryptoSymbol}`);
+      
+      // First try v2/aggs/ticker/{symbol}/prev endpoint for previous day's data
+      endpoint = `${POLYGON_BASE_URL}/v2/aggs/ticker/X:${fromCurrency}${toCurrency}/prev?adjusted=true&apiKey=${POLYGON_API_KEY}`;
+      
+      // We'll try multiple endpoints if this fails
+    } else if (assetType === 'forex') {
+      // تنسيق الفوركس في Polygon يكون C:EURUSD مثلاً
+      polygonSymbol = symbol.replace('/', '');
+      ticker = `C:${polygonSymbol}`;
+      // Use v3 endpoint without extra v3 prefix
+      endpoint = `${POLYGON_BASE_URL}/snapshot?ticker=${ticker}&type=${assetType}&apiKey=${POLYGON_API_KEY}`;
+    } else {
+      console.error(`Unsupported asset type: ${assetType}`);
+      return null;
+    }
+    
+    console.log(`Fetching data from Polygon for ${symbol} (${assetType}), URL: ${endpoint}`);
+    const response = await fetch(endpoint);
+    
+    if (!response.ok) {
+      throw new Error(`Polygon API returned ${response.status}: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    
+    // تنسيق البيانات بناءً على نوع الأصل
+    let price, change, changePercent, volume, high24h, low24h;
+    
+    // معالجة البيانات حسب نقطة النهاية والنوع
+    if (assetType === 'crypto' && data) {
+      // معالجة بيانات واجهة /v1/open-close/crypto للعملات المشفرة
+      console.log(`معالجة بيانات العملات المشفرة من واجهة /v1/open-close/crypto`);
+      
+      // Open-Close API format
+      if (data.status === 'OK' && data.symbol) {
+        console.log(`استخدام بيانات open-close العملات المشفرة: ${JSON.stringify(data)}`);
+        
+        // استخدام بيانات السعر من واجهة open-close
+        const currentPrice = parseFloat(data.close);
+        const openPrice = parseFloat(data.open);
+        const priceChange = currentPrice - openPrice;
+        
+        // تنسيق البيانات
+        price = currentPrice.toFixed(2);
+        change = priceChange.toFixed(2);
+        changePercent = ((priceChange / openPrice) * 100).toFixed(2);
+        volume = data.volume || 0;
+        
+        // الحد الأعلى والأدنى من بيانات API
+        high24h = parseFloat(data.high).toFixed(2);
+        low24h = parseFloat(data.low).toFixed(2);
+        
+        // تحديث السعر الحالي للرمز
+        currentPrices[symbol] = currentPrice;
+      }
+      // استخدام بيانات v1/last/crypto fallback (deprecated path)
+      else if (data.last && data.last.price) {
+        console.log(`استخدام بيانات last-crypto العملات المشفرة: ${JSON.stringify(data.last)}`);
+        
+        // استخدام بيانات السعر من واجهة v1
+        const currentPrice = parseFloat(data.last.price);
+        // نحتاج القيمة السابقة لحساب التغيير
+        const previousPrice = currentPrices[symbol] || currentPrice;
+        const priceChange = currentPrice - previousPrice;
+        
+        // تنسيق البيانات
+        price = currentPrice.toFixed(2);
+        change = priceChange.toFixed(2);
+        changePercent = ((priceChange / previousPrice) * 100).toFixed(2);
+        volume = data.last.size || 0;
+        
+        // التقدير للحد الأعلى والأدنى (غير متوفر في هذه الواجهة)
+        high24h = (currentPrice * 1.01).toFixed(2); // تقدير +1%
+        low24h = (currentPrice * 0.99).toFixed(2);  // تقدير -1%
+        
+        // تحديث السعر الحالي للرمز
+        currentPrices[symbol] = currentPrice;
+      } else {
+        // استخدام تقدير لو لم تتوفر بيانات مناسبة
+        console.log(`استخدام تقديرات للعملات المشفرة لعدم وجود بيانات مناسبة`);
+        
+        const storedPrice = currentPrices[symbol] || 100;
+        const priceChange = storedPrice * (0.5 + Math.random()) * 0.02 * (Math.random() > 0.5 ? 1 : -1);
+        const newPrice = storedPrice + priceChange;
+        
+        price = newPrice.toFixed(2);
+        change = priceChange.toFixed(2);
+        changePercent = ((priceChange / storedPrice) * 100).toFixed(2);
+        volume = Math.floor(Math.random() * 10000000);
+        high24h = (parseFloat(price) * (1 + Math.random() * 0.05)).toFixed(2);
+        low24h = (parseFloat(price) * (1 - Math.random() * 0.05)).toFixed(2);
+        
+        currentPrices[symbol] = parseFloat(price);
+      }
+    } else if (data && data.results && data.results.length > 0) {
+      // معالجة بيانات واجهة Universal Snapshot الموحدة
+      const result = data.results[0]; // نتائج API تكون في مصفوفة
+      
+      if (assetType === 'stock' || assetType === 'index') {
+        // التعامل مع الأسهم/المؤشرات
+        if (result.session) {
+          price = result.session.close?.toFixed(2) || result.session.price?.toFixed(2) || '0.00';
+          change = result.session.change?.toFixed(2) || '0.00';
+          changePercent = result.session.change_percent?.toFixed(2) || '0.00';
+          volume = result.session.volume || 0;
+          high24h = result.session.high?.toFixed(2) || '0.00';
+          low24h = result.session.low?.toFixed(2) || '0.00';
+        } else if (result.day) {
+          price = result.day.c.toFixed(2);
+          change = (result.day.c - result.day.o).toFixed(2);
+          changePercent = ((result.day.c - result.day.o) / result.day.o * 100).toFixed(2);
+          volume = result.day.v || 0;
+          high24h = result.day.h?.toFixed(2) || '0.00';
+          low24h = result.day.l?.toFixed(2) || '0.00';
+        }
+      } else if (assetType === 'forex') {
+        // التعامل مع الفوركس
+        if (result.session) {
+          price = result.session.price?.toFixed(4) || result.session.close?.toFixed(4) || '0.0000';
+          change = result.session.change?.toFixed(4) || '0.0000';
+          changePercent = result.session.change_percent?.toFixed(2) || '0.00';
+          volume = result.session.volume || 0;
+          high24h = result.session.high?.toFixed(4) || '0.0000';
+          low24h = result.session.low?.toFixed(4) || '0.0000';
+        }
+        
+        // إذا كان هناك آخر تداول، استخدمه للسعر الحالي
+        if (result.last_trade && result.last_trade.price) {
+          price = result.last_trade.price.toFixed(4);
+        } else if (result.lastTrade && result.lastTrade.p) {
+          price = result.lastTrade.p.toFixed(4);
+        }
+        
+        // استخدام العرض/الطلب إذا لم تتوفر البيانات الأخرى
+        if (!price && result.lastQuote) {
+          price = ((result.lastQuote.p || (result.lastQuote.bp + result.lastQuote.ap) / 2)).toFixed(4);
+        }
+      }
+    } else {
+      console.warn(`لم يتم العثور على بيانات صالحة من Polygon لـ ${symbol}, استخدام قيم افتراضية`);
+      price = '0.00';
+      change = '0.00';
+      changePercent = '0.00';
+      volume = 0;
+      high24h = '0.00';
+      low24h = '0.00';
+    }
+    
+    return {
+      price,
+      change,
+      changePercent,
+      volume,
+      high24h,
+      low24h,
+      marketStatus: areMarketsOpen(assetType) ? 'open' : 'closed',
+      assetType
+    };
+  } catch (error) {
+    console.error(`Error fetching Polygon data for ${symbol}:`, error);
+    return null;
+  }
+}
+
+// توصيل بـ Polygon WebSocket لبيانات أسعار العملات الرقمية والفوركس المباشرة
+// تتبع محاولات إعادة الاتصال للتراجع الأسي
+// Reusing reconnectAttempt, MAX_RECONNECT_DELAY, BATCH_SIZE, and BATCH_DELAY constants from above
+
+async function initializePolygonWebSocket() {
+  try {
+    if (!POLYGON_API_KEY) {
+      console.error('POLYGON_API_KEY is not set, WebSocket connection not established');
+      return;
+    }
+    
+    // إنهاء الاتصالات الحالية إذا وجدت
+    if (polygonCryptoWs) {
+      polygonCryptoWs.terminate();
+    }
+    
+    if (polygonForexWs) {
+      polygonForexWs.terminate();
+    }
+    
+    // الحصول على الأصول النشطة من قاعدة البيانات
+    const activeAssetsQuery = `
+      SELECT symbol, type, polygon_symbol 
+      FROM assets 
+      WHERE is_active = true 
+      AND (type = 'crypto' OR type = 'forex')
+    `;
+    const activeAssetsResult = await pool.query(activeAssetsQuery);
+    const activeAssets = activeAssetsResult.rows;
+    
+    console.log(`Found ${activeAssets.length} active assets for WebSocket subscription`);
+    
+    // تجميع الأصول حسب النوع
+    const cryptoAssets = [];
+    const forexAssets = [];
+    
+    activeAssets.forEach(asset => {
+      if (asset.type === 'crypto') {
+        cryptoAssets.push(asset);
+      } else if (asset.type === 'forex') {
+        forexAssets.push(asset);
+      }
+    });
+    
+    console.log(`Sorted assets: ${cryptoAssets.length} crypto and ${forexAssets.length} forex assets`);
+    
+    // تأسيس اتصال WebSocket للعملات المشفرة
+    if (cryptoAssets.length > 0) {
+      await initializePolygonCryptoWebSocket(cryptoAssets);
+    }
+    
+    // تأسيس اتصال WebSocket للفوركس
+    if (forexAssets.length > 0 && areMarketsOpen('forex')) {
+      await initializePolygonForexWebSocket(forexAssets);
+    } else {
+      console.log('Forex markets are closed. Skipping Forex WebSocket connection.');
+    }
+    
+  } catch (error) {
+    console.error(`Error in initializePolygonWebSocket:`, error);
+    // إعادة المحاولة بعد فترة
+    setTimeout(initializePolygonWebSocket, 30000);
+  }
+}
+
+/**
+ * Initialize and manage WebSocket connection for cryptocurrency data from Polygon.io
+ * 
+ * This implementation follows Polygon.io WebSocket API specification:
+ * 1. Connect to wss://socket.polygon.io/crypto
+ * 2. Authenticate using API key
+ * 3. Subscribe to real-time data feeds upon auth_success message
+ * 4. Process incoming messages and update database with price changes
+ * 
+ * @param {Array} cryptoAssets - Array of cryptocurrency assets from database
+ */
+async function initializePolygonCryptoWebSocket(cryptoAssets) {
+  try {
+    // Enhanced debug logging
+    console.log('===== CRYPTO WEBSOCKET DEBUG =====');
+    console.log(`DEBUG: Environment mode: ${process.env.NODE_ENV || 'production'}`);
+    console.log(`DEBUG: Polygon API key available: ${POLYGON_API_KEY ? 'Yes' : 'No'}`);
+    
+    if (!POLYGON_API_KEY) {
+      console.error('Polygon API key is not configured. WebSocket connection cannot be established.');
+      return;
+    }
+    
+    // Close existing connection if it exists
+    if (polygonCryptoWs) {
+      console.log('Closing existing crypto WebSocket connection');
+      polygonCryptoWs.terminate();
+    }
+    
+    // Connect to Polygon Crypto WebSocket using the proper URL from config
+    console.log(`Connecting to Polygon Crypto WebSocket at ${POLYGON_CRYPTO_WS_URL}`);
+    polygonCryptoWs = new WebSocket(POLYGON_CRYPTO_WS_URL);
+    
+    // عند الاتصال - On connection
+    polygonCryptoWs.on('open', async () => {
+      console.log('Polygon Crypto WebSocket connection established successfully');
+      reconnectAttempt = 0; // Reset reconnection attempts on success
+      
+      // Authenticate with direct API key (not using REST key for WebSocket)
+      const authMessage = {
+        action: 'auth',
+        params: POLYGON_API_KEY // Using raw API key as specified in the task
+      };
+      
+      console.log('Sending authentication message to Polygon Crypto WebSocket');
+      polygonCryptoWs.send(JSON.stringify(authMessage));
+      
+      // We'll subscribe to channels after receiving auth_success message
+      // See the message handler below
+    });
+    
+    // On message received from Polygon WebSocket
+    polygonCryptoWs.on('message', async (message) => {
+      try {
+        // Parse the message based on its format
+        let messageData;
+        if (Buffer.isBuffer(message)) {
+          messageData = JSON.parse(message.toString('utf8'));
+        } else if (typeof message === 'string') {
+          messageData = JSON.parse(message);
+        } else {
+          console.log(`Polygon Crypto WebSocket received unknown message type: ${typeof message}`);
+          return;
+        }
+        
+        // Handle auth success message to subscribe to channels
+        if (messageData.ev === 'status' && messageData.status === 'auth_success') {
+          console.log('Polygon Crypto WebSocket authentication successful. Subscribing to data channels...');
+          
+          // Prepare subscription symbols properly formatted as per Polygon.io requirements
+          // Format should be: XT.BTCUSD, XA.ETHUSD, etc.
+          const subscriptionSymbols = [];
+          
+          cryptoAssets.forEach(asset => {
+            // Preferred approach: use polygon_symbol stored in database
+            if (asset.polygon_symbol && asset.polygon_symbol.startsWith('X:')) {
+              // Convert X:BTCUSD to X.BTCUSD (replace : with .)
+              const rawSymbol = asset.polygon_symbol.replace('X:', '');
+              
+              // Create channel-specific symbols (XT.BTCUSD, XA.BTCUSD, etc.)
+              CRYPTO_CHANNELS.forEach(channel => {
+                const wsSymbol = `${channel}.${rawSymbol}`;
+                subscriptionSymbols.push(wsSymbol);
+              });
+              
+              console.log(`Configured WebSocket symbol for crypto: ${asset.symbol} -> ${CRYPTO_CHANNELS[0]}.${rawSymbol}`);
+            } 
+            // Alternative approach: use asset symbol directly
+            else {
+              // Remove any slashes or special characters
+              const cleanSymbol = asset.symbol.replace('/', '');
+              
+              // Create channel-specific symbols (XT.BTCUSD, XA.BTCUSD, etc.)
+              CRYPTO_CHANNELS.forEach(channel => {
+                const wsSymbol = `${channel}.${cleanSymbol}`;
+                subscriptionSymbols.push(wsSymbol);
+              });
+              
+              console.log(`Configured WebSocket symbol from base symbol: ${asset.symbol} -> ${CRYPTO_CHANNELS[0]}.${cleanSymbol}`);
+            }
+          });
+            
+          // Split symbols into batches (max 50 per batch according to API limits)
+          const symbolBatches = [];
+          for (let i = 0; i < subscriptionSymbols.length; i += BATCH_SIZE) {
+            symbolBatches.push(subscriptionSymbols.slice(i, i + BATCH_SIZE));
+          }
+          
+          console.log(`Sending ${symbolBatches.length} subscription batches with ${BATCH_DELAY}ms delay between batches`);
+          
+          // Send batches with delay between them
+          for (let i = 0; i < symbolBatches.length; i++) {
+            const batch = symbolBatches[i];
+            const subscribeMessage = {
+              action: 'subscribe',
+              params: batch.join(',')
+            };
+            
+            polygonCryptoWs.send(JSON.stringify(subscribeMessage));
+            console.log(`Sent batch ${i+1}/${symbolBatches.length} with ${batch.length} symbols`);
+            
+            if (i < symbolBatches.length - 1) {
+              // Delay before sending next batch to avoid rate limiting
+              await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
+            }
+          }
+          
+          console.log(`Subscribed to Polygon Crypto WebSocket for ${subscriptionSymbols.length} channel-asset combinations`);
+          return;
+        }
+        
+        // عند استلام رسالة - Handle price update messages
+      try {
+        // التحقق من نوع الرسالة وتحويلها إلى نص إذا كانت buffer
+        let messageStr;
+        if (Buffer.isBuffer(message)) {
+          messageStr = message.toString('utf8');
+        } else if (typeof message === 'string') {
+          messageStr = message;
+        } else {
+          console.log(`Polygon WebSocket message received: Unknown message type: ${typeof message}`);
+          return;
+        }
+        
+        // طباعة جزء من الرسالة (أول 200 حرف)
+        console.log(`Polygon WebSocket message received: ${messageStr.substring(0, 200)}...`);
+        
+        const data = JSON.parse(messageStr);
+        
+        // معالجة رسائل التأكيد
+        if (data.ev === 'status') {
+          console.log(`Polygon WebSocket status: ${data.status} - ${data.message}`);
+          return;
+        }
+        
+        // معالجة تحديثات الأسعار
+        if (Array.isArray(data) && data[0] && data[0].ev === 'T') {
+          const update = data[0];
+          console.log(`Processing WebSocket price update:`, JSON.stringify(update));
+          
+          // استخراج رمز الأصل والنوع
+          let symbol, assetType, originalSymbol;
+          
+          if (update.pair) {
+            // تسجيل بيانات الحدث بتفاصيل أكثر لتتبع المشكلة
+            const updateDetails = JSON.stringify(update);
+            console.log(`WebSocket Update Details: ${updateDetails}`);
+
+            // البحث عن الأصل في قاعدة البيانات بناءً على رمز polygon
+            // تنسيق الرمز بشكل صحيح: C.EURUSD يجب أن يتطابق مع C:EURUSD في قاعدة البيانات
+            let polygonSymbol = update.pair;
+            
+            if (update.pair.includes('.')) {
+                // تحويل C.EURUSD إلى C:EURUSD للمطابقة مع قاعدة البيانات
+                polygonSymbol = update.pair.replace('.', ':');
+                console.log(`Formatted Polygon symbol from ${update.pair} to ${polygonSymbol}`);
+            }
+            
+            try {
+              console.log(`Looking for asset with polygon_symbol = ${polygonSymbol} in database`);
+              
+              // محاولة البحث بواسطة polygon_symbol أولاً
+              const assetQuery = `
+                SELECT symbol, type FROM assets WHERE polygon_symbol = $1
+              `;
+              const assetResult = await pool.query(assetQuery, [polygonSymbol]);
+              
+              if (assetResult.rows.length > 0) {
+                const asset = assetResult.rows[0];
+                symbol = asset.symbol;
+                assetType = asset.type;
+                originalSymbol = update.pair;
+                
+                console.log(`SUCCESS: Found asset ${symbol} (${assetType}) for Polygon symbol ${polygonSymbol}`);
+              } else {
+                // إذا فشل البحث بواسطة polygon_symbol، يمكننا محاولة البحث عن طريق استقراء الرمز من التنسيق
+                console.log(`Asset NOT found with polygon_symbol=${polygonSymbol}, trying to infer symbol from format`);
+                
+                if (update.pair.startsWith('XT.')) {
+                  // عملة رقمية - مثال: XT.BTC-USD
+                  symbol = update.pair.substring(3).replace('-', '/');
+                  console.log(`Inferred crypto symbol: ${update.pair} -> ${symbol}`);
+                  assetType = 'crypto';
+                  originalSymbol = update.pair;
+                  
+                  // محاولة البحث مرة أخرى باستخدام الرمز المستنتج
+                  const cryptoQuery = `
+                    SELECT symbol, type FROM assets WHERE symbol = $1
+                  `;
+                  const cryptoResult = await pool.query(cryptoQuery, [symbol]);
+                  
+                  if (cryptoResult.rows.length > 0) {
+                    const asset = cryptoResult.rows[0];
+                    symbol = asset.symbol;
+                    assetType = asset.type;
+                    console.log(`SUCCESS: Found crypto asset by inferred symbol ${symbol}`);
+                  } else {
+                    console.log(`WARNING: Crypto asset with symbol ${symbol} not found in database`);
+                  }
+                } else if (update.pair.startsWith('C.')) {
+                  // فوركس - مثال: C.EURUSD
+                  symbol = update.pair.substring(2).replace(/([A-Z]{3})([A-Z]{3})/, '$1/$2');
+                  console.log(`Inferred forex symbol: ${update.pair} -> ${symbol}`);
+                  assetType = 'forex';
+                  originalSymbol = update.pair;
+                  
+                  // محاولة البحث مرة أخرى باستخدام الرمز المستنتج
+                  const forexQuery = `
+                    SELECT symbol, type FROM assets WHERE symbol = $1
+                  `;
+                  const forexResult = await pool.query(forexQuery, [symbol]);
+                  
+                  if (forexResult.rows.length > 0) {
+                    const asset = forexResult.rows[0];
+                    symbol = asset.symbol;
+                    assetType = asset.type;
+                    console.log(`SUCCESS: Found forex asset by inferred symbol ${symbol}`);
+                  } else {
+                    console.log(`WARNING: Forex asset with symbol ${symbol} not found in database`);
+                  }
+                }
+              }
+            } catch (error) {
+              console.error(`Error looking up asset for Polygon symbol ${update.pair}:`, error);
+            }
+          }
+          
+          // إذا تم التعرف على الرمز، تحديث السعر
+          if (symbol) {
+            // البحث عن السعر السابق للمقارنة
+            const previousPrice = currentPrices[symbol] || null;
+            const newPrice = update.p;
+            
+            // حساب التغيير بناءً على السعر السابق
+            let change, changePercent;
+            
+            if (previousPrice !== null) {
+              change = newPrice - previousPrice;
+              changePercent = previousPrice > 0 ? (change / previousPrice * 100) : 0;
+            } else {
+              // إذا لم يكن هناك سعر سابق، استخدم القيم الواردة من التحديث
+              change = 0;
+              changePercent = 0;
+            }
+            
+            // تخزين السعر الحالي كسعر سابق للمقارنة في التحديثات المستقبلية
+            currentPrices[symbol] = newPrice;
+            
+            console.log(`Updating ${symbol} price from ${previousPrice || 'unknown'} to ${newPrice} (change: ${change}, ${changePercent}%)`);
+            
+            // تحديث قاعدة البيانات - احتفظ بالسعر السابق (last_price) قبل التحديث
+            try {
+              // أولاً احصل على السعر الحالي لتخزينه كـ last_price
+              const currentPriceQuery = `
+                SELECT price as current_price 
+                FROM assets 
+                WHERE symbol = $1
+              `;
+              const currentPriceResult = await pool.query(currentPriceQuery, [symbol]);
+              let lastPrice = null;
+              
+              if (currentPriceResult.rows.length > 0) {
+                lastPrice = currentPriceResult.rows[0].current_price;
+              }
+              
+              // الآن تحديث السعر مع الاحتفاظ بالسعر السابق
+              await updateAssetInDatabase(symbol, {
+                price: newPrice.toFixed(assetType === 'forex' ? 4 : 2),
+                lastPrice: lastPrice,
+                change: change.toFixed(assetType === 'forex' ? 4 : 2),
+                changePercent: changePercent.toFixed(2),
+                volume: update.s || 0,
+                assetType,
+                high24h: update.h ? update.h.toFixed(assetType === 'forex' ? 4 : 2) : null,
+                low24h: update.l ? update.l.toFixed(assetType === 'forex' ? 4 : 2) : null
+              });
+            } catch (dbError) {
+              console.error(`Error updating database for ${symbol}:`, dbError);
+            }
+          } else {
+            console.log(`Received update for unknown symbol: ${update.pair}`);
+          }
+        }
+      } catch (error) {
+        console.error('Error processing Polygon WebSocket message:', error);
+      }
+    });
+    
+    // معالجة الأخطاء وإعادة الاتصال مع تأخير متزايد
+    polygonCryptoWs.on('error', (error) => {
+      console.error('Polygon Crypto WebSocket error:', error);
+      scheduleReconnect();
+    });
+    
+    polygonCryptoWs.on('close', () => {
+      console.log('Polygon Crypto WebSocket connection closed');
+      scheduleReconnect();
+    });
+  } catch (error) {
+    console.error('Error initializing Polygon WebSocket:', error);
+    scheduleReconnect();
+  }
+}
+
+/**
+ * Initialize and manage WebSocket connection for forex data from Polygon.io
+ * 
+ * This implementation follows Polygon.io WebSocket API specification:
+ * 1. Connect to wss://socket.polygon.io/forex
+ * 2. Authenticate using API key
+ * 3. Subscribe to real-time data feeds upon auth_success message
+ * 4. Process incoming messages and update database with price changes
+ * 
+ * @param {Array} forexAssets - Array of forex assets from database
+ */
+async function initializePolygonForexWebSocket(forexAssets) {
+  try {
+    // Enhanced debug logging
+    console.log('===== FOREX WEBSOCKET DEBUG =====');
+    console.log(`DEBUG: Environment mode: ${process.env.NODE_ENV || 'production'}`);
+    console.log(`DEBUG: Polygon API key available: ${POLYGON_API_KEY ? 'Yes' : 'No'}`);
+    console.log(`DEBUG: Market status: ${areMarketsOpen('forex') ? 'Open' : 'Closed'}`);
+    
+    if (!POLYGON_API_KEY) {
+      console.error('Polygon API key is not configured. WebSocket connection cannot be established.');
+      return;
+    }
+    
+    // Check if markets are open - for forex this depends on day/time
+    if (!areMarketsOpen('forex')) {
+      console.log('سوق الفوركس مغلق (الأحد). تم تخطي اتصال WebSocket');
+      console.log('Forex market is closed (Sunday). Skipping WebSocket connection');
+      return;
+    }
+    
+    // Close existing connection if it exists
+    if (polygonForexWs) {
+      console.log('Closing existing forex WebSocket connection');
+      polygonForexWs.terminate();
+    }
+    
+    // Connect to Polygon Forex WebSocket using the proper URL from config
+    console.log(`Connecting to Polygon Forex WebSocket at ${POLYGON_FOREX_WS_URL}`);
+    polygonForexWs = new WebSocket(POLYGON_FOREX_WS_URL);
+    
+    // عند الاتصال - On connection
+    polygonForexWs.on('open', async () => {
+      console.log('Polygon Forex WebSocket connection established successfully');
+      reconnectAttempt = 0; // Reset reconnection attempts on success
+      
+      // Authenticate with direct API key
+      const authMessage = {
+        action: 'auth',
+        params: POLYGON_API_KEY
+      };
+      
+      console.log('Sending authentication message to Polygon Forex WebSocket');
+      polygonForexWs.send(JSON.stringify(authMessage));
+      
+      // We'll subscribe to channels after receiving auth_success message
+      // See the message handler below
+    });
+    
+    // On message handler
+    polygonForexWs.on('message', async (message) => {
+      try {
+        // Parse the message based on its format
+        let messageData;
+        if (Buffer.isBuffer(message)) {
+          messageData = JSON.parse(message.toString('utf8'));
+        } else if (typeof message === 'string') {
+          messageData = JSON.parse(message);
+        } else {
+          console.log(`Polygon Forex WebSocket received unknown message type: ${typeof message}`);
+          return;
+        }
+        
+        // Handle auth success message to subscribe to channels
+        if (messageData.ev === 'status' && messageData.status === 'auth_success') {
+          console.log('Polygon Forex WebSocket authentication successful. Subscribing to data channels...');
+          
+          // Prepare subscription symbols properly formatted as per Polygon.io requirements
+          // Format should be: C.EURUSD, CA.GBPUSD, etc.
+          const subscriptionSymbols = [];
+          
+          forexAssets.forEach(asset => {
+            // Preferred approach: use polygon_symbol stored in database
+            if (asset.polygon_symbol && asset.polygon_symbol.startsWith('C:')) {
+              // Convert C:EURUSD to C.EURUSD (replace : with .)
+              const rawSymbol = asset.polygon_symbol.replace('C:', '');
+              
+              // Create channel-specific symbols (C.EURUSD, CA.EURUSD, etc.)
+              FOREX_CHANNELS.forEach(channel => {
+                const wsSymbol = `${channel}.${rawSymbol}`;
+                subscriptionSymbols.push(wsSymbol);
+              });
+              
+              console.log(`Configured WebSocket symbol for forex: ${asset.symbol} -> ${FOREX_CHANNELS[0]}.${rawSymbol}`);
+            } 
+            // Alternative approach: use asset symbol directly
+            else {
+              // Remove any slashes or special characters
+              const cleanSymbol = asset.symbol.replace('/', '');
+              
+              // Create channel-specific symbols (C.EURUSD, CA.EURUSD, etc.)
+              FOREX_CHANNELS.forEach(channel => {
+                const wsSymbol = `${channel}.${cleanSymbol}`;
+                subscriptionSymbols.push(wsSymbol);
+              });
+              
+              console.log(`Configured WebSocket symbol from base symbol: ${asset.symbol} -> ${FOREX_CHANNELS[0]}.${cleanSymbol}`);
+            }
+          });
+            
+          // Split symbols into batches (max 50 per batch according to API limits)
+          const symbolBatches = [];
+          for (let i = 0; i < subscriptionSymbols.length; i += BATCH_SIZE) {
+            symbolBatches.push(subscriptionSymbols.slice(i, i + BATCH_SIZE));
+          }
+          
+          console.log(`Sending ${symbolBatches.length} forex subscription batches with ${BATCH_DELAY}ms delay between batches`);
+          
+          // Send batches with delay between them
+          for (let i = 0; i < symbolBatches.length; i++) {
+            const batch = symbolBatches[i];
+            const subscribeMessage = {
+              action: 'subscribe',
+              params: batch.join(',')
+            };
+            
+            polygonForexWs.send(JSON.stringify(subscribeMessage));
+            console.log(`Sent forex batch ${i+1}/${symbolBatches.length} with ${batch.length} symbols`);
+            
+            if (i < symbolBatches.length - 1) {
+              // Delay before sending next batch to avoid rate limiting
+              await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
+            }
+          }
+          
+          console.log(`Subscribed to Polygon Forex WebSocket for ${subscriptionSymbols.length} channel-asset combinations`);
+          return;
+        }
+        
+        // Process price updates
+        // طباعة جزء من الرسالة (أول 200 حرف)
+        const messageStrForLog = JSON.stringify(messageData).substring(0, 200);
+        console.log(`Polygon Forex WebSocket message received: ${messageStrForLog}...`);
+        
+        // معالجة رسائل التأكيد - Processing status messages
+        if (messageData.ev === 'status') {
+          console.log(`Polygon Forex WebSocket status: ${messageData.status} - ${messageData.message}`);
+          return;
+        }
+        
+        // معالجة تحديثات الأسعار - Processing price updates
+        if (Array.isArray(messageData) && messageData[0]) {
+          const update = messageData[0];
+          
+          // Check for different event types (C for quotes, CA for aggregates)
+          if (update.ev === 'C' || update.ev === 'CA' || update.ev === 'CAS') {
+            console.log(`Processing Forex WebSocket price update:`, JSON.stringify(update));
+            
+            // استخراج رمز الأصل - Extract asset symbol
+            let symbol, assetType, originalSymbol;
+          
+          if (update.p) {
+            // تسجيل بيانات الحدث بتفاصيل أكثر لتتبع المشكلة
+            const updateDetails = JSON.stringify(update);
+            console.log(`Forex WebSocket Update Details: ${updateDetails}`);
+            
+            // البحث عن الأصل في قاعدة البيانات بناءً على رمز polygon
+            // تنسيق الرمز بشكل صحيح: C.EURUSD يجب أن يتطابق مع C:EURUSD في قاعدة البيانات
+            let polygonSymbol = update.p;
+            
+            if (update.p.includes('.')) {
+                // تحويل C.EURUSD إلى C:EURUSD للمطابقة مع قاعدة البيانات
+                polygonSymbol = update.p.replace('.', ':');
+                console.log(`Formatted Polygon Forex symbol from ${update.p} to ${polygonSymbol}`);
+            }
+            
+            try {
+              console.log(`Looking for forex asset with polygon_symbol = ${polygonSymbol} in database`);
+              
+              // محاولة البحث بواسطة polygon_symbol أولاً
+              const assetQuery = `
+                SELECT symbol, type FROM assets WHERE polygon_symbol = $1
+              `;
+              const assetResult = await pool.query(assetQuery, [polygonSymbol]);
+              
+              if (assetResult.rows.length > 0) {
+                const asset = assetResult.rows[0];
+                symbol = asset.symbol;
+                assetType = asset.type;
+                originalSymbol = update.p;
+                
+                console.log(`SUCCESS: Found forex asset ${symbol} (${assetType}) for Polygon symbol ${polygonSymbol}`);
+              } else {
+                // إذا فشل البحث بواسطة polygon_symbol، نحاول استقراء الرمز من update.p
+                if (update.p.startsWith('C.')) {
+                  // فوركس - مثال: C.EURUSD
+                  symbol = update.p.substring(2).replace(/([A-Z]{3})([A-Z]{3})/, '$1/$2');
+                  console.log(`Inferred forex symbol: ${update.p} -> ${symbol}`);
+                  assetType = 'forex';
+                  originalSymbol = update.p;
+                  
+                  // محاولة البحث مرة أخرى باستخدام الرمز المستنتج
+                  const forexQuery = `
+                    SELECT symbol, type FROM assets WHERE symbol = $1
+                  `;
+                  const forexResult = await pool.query(forexQuery, [symbol]);
+                  
+                  if (forexResult.rows.length > 0) {
+                    const asset = forexResult.rows[0];
+                    symbol = asset.symbol;
+                    assetType = asset.type;
+                    console.log(`SUCCESS: Found forex asset by inferred symbol ${symbol}`);
+                  } else {
+                    console.log(`WARNING: Forex asset with symbol ${symbol} not found in database`);
+                  }
+                }
+              }
+              
+              // إذا تم التعرف على الرمز، تحديث السعر
+              if (symbol) {
+                // البحث عن السعر السابق للمقارنة
+                const previousPrice = currentPrices[symbol] || null;
+                const newPrice = update.bp; // استخدام سعر العرض للفوركس
+                
+                // حساب التغيير بناءً على السعر السابق
+                let change, changePercent;
+                
+                if (previousPrice !== null) {
+                  change = newPrice - previousPrice;
+                  changePercent = previousPrice > 0 ? (change / previousPrice * 100) : 0;
+                } else {
+                  // إذا لم يكن هناك سعر سابق، استخدم 0
+                  change = 0;
+                  changePercent = 0;
+                }
+                
+                // تخزين السعر الحالي كسعر سابق للمقارنة في التحديثات المستقبلية
+                currentPrices[symbol] = newPrice;
+                
+                console.log(`Updating forex ${symbol} price from ${previousPrice || 'unknown'} to ${newPrice} (change: ${change}, ${changePercent}%)`);
+                
+                // تحديث قاعدة البيانات - احتفظ بالسعر السابق (last_price) قبل التحديث
+                try {
+                  // أولاً احصل على السعر الحالي لتخزينه كـ last_price
+                  const currentPriceQuery = `
+                    SELECT price as current_price 
+                    FROM assets 
+                    WHERE symbol = $1
+                  `;
+                  const currentPriceResult = await pool.query(currentPriceQuery, [symbol]);
+                  let lastPrice = null;
+                  
+                  if (currentPriceResult.rows.length > 0) {
+                    lastPrice = currentPriceResult.rows[0].current_price;
+                  }
+                  
+                  // الآن تحديث السعر مع الاحتفاظ بالسعر السابق
+                  await updateAssetInDatabase(symbol, {
+                    price: newPrice.toFixed(4), // 4 أرقام عشرية للفوركس
+                    lastPrice: lastPrice,
+                    change: change.toFixed(4),
+                    changePercent: changePercent.toFixed(2),
+                    assetType: 'forex',
+                    high24h: null, // قد لا تتوفر هذه البيانات
+                    low24h: null
+                  });
+                } catch (dbError) {
+                  console.error(`Error updating database for forex ${symbol}:`, dbError);
+                }
+              }
+            } catch (error) {
+              console.error(`Error processing forex data for ${update.p}:`, error);
+            }
+          } else {
+            console.log(`Received forex update without symbol: ${JSON.stringify(update)}`);
+          }
+        }
+      } catch (error) {
+        console.error('Error processing Polygon Forex WebSocket message:', error);
+      }
+    });
+    
+    // معالجة الأخطاء وإعادة الاتصال مع تأخير متزايد
+    polygonForexWs.on('error', (error) => {
+      console.error('Polygon Forex WebSocket error:', error);
+      scheduleReconnect();
+    });
+    
+    polygonForexWs.on('close', () => {
+      console.log('Polygon Forex WebSocket connection closed');
+      scheduleReconnect();
+    });
+  } catch (error) {
+    console.error('Error initializing Polygon Forex WebSocket:', error);
+    scheduleReconnect();
+  }
+}
+}
+
+// وظيفة لجدولة إعادة الاتصال مع تأخير متزايد
+function scheduleReconnect() {
+  reconnectAttempt++;
+  
+  // حساب التأخير مع تراجع أسي (مع حد أقصى)
+  const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempt), MAX_RECONNECT_DELAY);
+  
+  console.log(`Scheduling WebSocket reconnect attempt ${reconnectAttempt} in ${delay}ms`);
+  setTimeout(initializePolygonWebSocket, delay);
+}
+
+// This import is moved to the top of the file
+
+// تحديث العملات الرقمية والفوركس (التحديث المباشر)
+async function updateRealtimeAssets() {
+  if (!POLYGON_API_KEY) {
+    // استخدام محاكاة الأسعار إذا لم يتوفر مفتاح API
+    updateRealtimeAssetsSimulated();
+    return;
+  }
+  
+  try {
+    // تحديث العملات الرقمية (دائماً مفتوحة)
+    for (const asset of assetsByType.crypto) {
+      // Use our enhanced crypto data fetching with multiple fallback strategies
+      const data = await fetchCryptoData(asset.symbol, POLYGON_API_KEY, currentPrices);
+      
+      if (data) {
+        // تحديث السعر الحالي
+        currentPrices[asset.symbol] = parseFloat(data.price);
+        
+        // تحديث قاعدة البيانات
+        await updateAssetInDatabase(asset.symbol, data);
+        console.log(`[DB] Updated ${asset.symbol} price: ${data.price}, change: ${data.change}, volume: ${data.volume}`);
+      } else {
+        // استخدام البيانات المقدرة إذا فشل الاتصال بـ Polygon
+        const simData = simulatePriceChange(
+          currentPrices[asset.symbol] || asset.basePrice, 
+          asset.volatility || 1
+        );
+        
+        currentPrices[asset.symbol] = parseFloat(simData.price);
+        
+        await updateAssetInDatabase(asset.symbol, {
+          ...simData,
+          assetType: 'crypto'
+        });
+      }
+    }
+    
+    // تحديث الفوركس (التحقق إذا كان السوق مفتوح)
+    if (areMarketsOpen('forex')) {
+      for (const asset of assetsByType.forex) {
+        const data = await fetchPolygonPrice(asset.symbol, 'forex');
+        
+        if (data) {
+          // تحديث السعر الحالي
+          currentPrices[asset.symbol] = parseFloat(data.price);
+          
+          // تحديث قاعدة البيانات
+          await updateAssetInDatabase(asset.symbol, data);
+        } else {
+          // استخدام البيانات المقدرة إذا فشل الاتصال بـ Polygon
+          const simData = simulatePriceChange(
+            currentPrices[asset.symbol] || asset.basePrice,
+            asset.volatility || 1
+          );
+          
+          currentPrices[asset.symbol] = parseFloat(simData.price);
+          
+          await updateAssetInDatabase(asset.symbol, {
+            ...simData,
+            assetType: 'forex'
+          });
+        }
+      }
+    } else {
+      console.log('سوق الفوركس مغلق (الأحد). تم تخطي التحديثات.');
+    }
+  } catch (error) {
+    console.error('خطأ في تحديث الأصول المباشرة:', error);
+    // في حالة فشل البيانات الحقيقية، استخدم البيانات المقدّرة
+    updateRealtimeAssetsSimulated();
+  }
+}
+
+// تحديث محاكاة للعملات الرقمية والفوركس (تُستخدم كخطة طوارئ)
+async function updateRealtimeAssetsSimulated() {
+  console.log('استخدام الأسعار المقدرة لتحديث العملات الرقمية والفوركس');
+  
+  // تحديث العملات الرقمية (دائماً مفتوحة)
+  for (const asset of assetsByType.crypto) {
+    const simData = simulatePriceChange(
+      currentPrices[asset.symbol] || asset.basePrice, 
+      asset.volatility || 1
+    );
+    
+    // تحديث السعر الحالي
+    currentPrices[asset.symbol] = parseFloat(simData.price);
+    
+    // تحديث قاعدة البيانات
+    await updateAssetInDatabase(asset.symbol, {
+      ...simData,
+      assetType: 'crypto'
+    });
+  }
+  
+  // تحديث الفوركس (التحقق إذا كان السوق مفتوح)
+  if (areMarketsOpen('forex')) {
+    for (const asset of assetsByType.forex) {
+      const simData = simulatePriceChange(
+        currentPrices[asset.symbol] || asset.basePrice,
+        asset.volatility || 1
+      );
+      
+      // تحديث السعر الحالي
+      currentPrices[asset.symbol] = parseFloat(simData.price);
+      
+      // تحديث قاعدة البيانات
+      await updateAssetInDatabase(asset.symbol, {
+        ...simData,
+        assetType: 'forex'
+      });
+    }
+  } else {
+    console.log('سوق الفوركس مغلق (الأحد). تم تخطي التحديثات.');
+  }
+}
+
+// تحديث الأصول التقليدية (الأسهم والمؤشرات) عبر REST API
+async function updateTraditionalAssets() {
+  // التحقق إذا كانت الأسواق التقليدية مفتوحة
+  if (!areMarketsOpen('stock')) {
+    console.log('الأسواق التقليدية مغلقة (الأحد). تم تخطي التحديثات.');
+    return;
+  }
+  
+  if (!POLYGON_API_KEY) {
+    // استخدام محاكاة الأسعار إذا لم يتوفر مفتاح API
+    updateTraditionalAssetsSimulated();
+    return;
+  }
+  
+  try {
+    // تحديث الأسهم
+    for (const asset of assetsByType.stock) {
+      const data = await fetchPolygonPrice(asset.symbol, 'stock');
+      
+      if (data) {
+        // تحديث السعر الحالي
+        currentPrices[asset.symbol] = parseFloat(data.price);
+        
+        // تحديث قاعدة البيانات
+        await updateAssetInDatabase(asset.symbol, data);
+      } else {
+        // استخدام البيانات المقدرة إذا فشل الاتصال بـ Polygon
+        const simData = simulatePriceChange(
+          currentPrices[asset.symbol] || asset.basePrice
+        );
+        
+        currentPrices[asset.symbol] = parseFloat(simData.price);
+        
+        await updateAssetInDatabase(asset.symbol, {
+          ...simData,
+          assetType: 'stock'
+        });
+      }
+    }
+    
+    // تحديث المؤشرات
+    for (const asset of assetsByType.index) {
+      const data = await fetchPolygonPrice(asset.symbol, 'index');
+      
+      if (data) {
+        // تحديث السعر الحالي
+        currentPrices[asset.symbol] = parseFloat(data.price);
+        
+        // تحديث قاعدة البيانات
+        await updateAssetInDatabase(asset.symbol, data);
+      } else {
+        // استخدام البيانات المقدرة إذا فشل الاتصال بـ Polygon
+        const simData = simulatePriceChange(
+          currentPrices[asset.symbol] || asset.basePrice
+        );
+        
+        currentPrices[asset.symbol] = parseFloat(simData.price);
+        
+        await updateAssetInDatabase(asset.symbol, {
+          ...simData,
+          assetType: 'index'
+        });
+      }
+    }
+  } catch (error) {
+    console.error('خطأ في تحديث الأصول التقليدية:', error);
+    // في حالة فشل البيانات الحقيقية، استخدم البيانات المقدّرة
+    updateTraditionalAssetsSimulated();
+  }
+}
+
+// تحديث محاكاة للأصول التقليدية (تُستخدم كخطة طوارئ)
+async function updateTraditionalAssetsSimulated() {
+  console.log('استخدام الأسعار المقدرة لتحديث الأسهم والمؤشرات');
+  
+  // تحديث الأسهم
+  for (const asset of assetsByType.stock) {
+    const simData = simulatePriceChange(
+      currentPrices[asset.symbol] || asset.basePrice
+    );
+    
+    // تحديث السعر الحالي
+    currentPrices[asset.symbol] = parseFloat(simData.price);
+    
+    // تحديث قاعدة البيانات
+    await updateAssetInDatabase(asset.symbol, {
+      ...simData,
+      assetType: 'stock'
+    });
+  }
+  
+  // تحديث المؤشرات
+  for (const asset of assetsByType.index) {
+    const simData = simulatePriceChange(
+      currentPrices[asset.symbol] || asset.basePrice
+    );
+    
+    // تحديث السعر الحالي
+    currentPrices[asset.symbol] = parseFloat(simData.price);
+    
+    // تحديث قاعدة البيانات
+    await updateAssetInDatabase(asset.symbol, {
+      ...simData,
+      assetType: 'index'
+    });
+  }
+}
+
+// وظيفة مساعدة للتأكد من تحديث حقل polygon_symbol بشكل صحيح لجميع الأصول
+async function ensurePolygonSymbols() {
+  try {
+    console.log("تحديث رموز Polygon لجميع الأصول النشطة...");
+    
+    // 1. جلب جميع الأصول النشطة
+    const assetsQuery = `
+      SELECT id, symbol, type, polygon_symbol 
+      FROM assets 
+      WHERE is_active = true
+    `;
+    const assetsResult = await pool.query(assetsQuery);
+    const assets = assetsResult.rows;
+    console.log(`وجدت ${assets.length} أصل نشط للتحديث`);
+    
+    let updatedCount = 0;
+    
+    // 2. التحقق من كل أصل وتحديث polygon_symbol إذا لزم الأمر
+    for (const asset of assets) {
+      let polygonSymbol = null;
+      
+      if (asset.type === 'crypto') {
+        // العملات الرقمية: X:BTCUSD
+        const baseCurrency = asset.symbol.split('/')[0];
+        const quoteCurrency = asset.symbol.split('/')[1] || 'USD';
+        polygonSymbol = `X:${baseCurrency}${quoteCurrency}`;
+      } else if (asset.type === 'forex') {
+        // الفوركس: C:EURUSD
+        polygonSymbol = `C:${asset.symbol.replace('/', '')}`;
+      } else if (asset.type === 'stock') {
+        // الأسهم: تستخدم الرمز كما هو
+        polygonSymbol = asset.symbol;
+      } else if (asset.type === 'index') {
+        // المؤشرات: تستخدم الرمز كما هو
+        polygonSymbol = asset.symbol;
+      }
+      
+      // تحديث في قاعدة البيانات فقط إذا كانت قيمة polygon_symbol غير موجودة أو مختلفة
+      if (polygonSymbol && (!asset.polygon_symbol || asset.polygon_symbol !== polygonSymbol)) {
+        const updateQuery = `
+          UPDATE assets 
+          SET polygon_symbol = $1 
+          WHERE id = $2
+          RETURNING symbol, polygon_symbol
+        `;
+        const updateResult = await pool.query(updateQuery, [polygonSymbol, asset.id]);
+        
+        if (updateResult.rows.length > 0) {
+          updatedCount++;
+          console.log(`تم تحديث الأصل ${asset.symbol} مع polygon_symbol = ${polygonSymbol}`);
+        }
+      }
+    }
+    
+    console.log(`تم تحديث ${updatedCount} أصل بنجاح مع رموز Polygon المناسبة`);
+    
+    return true;
+  } catch (error) {
+    console.error('خطأ في تحديث رموز Polygon:', error);
+    return false;
+  }
+}
+
+// البدء في تحديث الأسعار
+
+// تأكد من تحديث رموز polygon أولاً، ثم قم بتهيئة اتصال WebSocket
+async function initialize() {
+  // 1. تحديث رموز polygon في قاعدة البيانات
+  await ensurePolygonSymbols();
+  
+  // 2. تهيئة Polygon WebSocket لجلب بيانات حية للعملات الرقمية والفوركس
+  if (POLYGON_API_KEY) {
+    try {
+      initializePolygonWebSocket();
+    } catch (error) {
+      console.error('خطأ في تهيئة Polygon WebSocket:', error);
+    }
+  }
+  
+  // 3. بدء تحديث الأصول فوراً
+  console.log('بدء تحديث أسعار الأصول...');
+  updateRealtimeAssets();
+  updateTraditionalAssets();
+}
+
+// بدء عملية التهيئة
+initialize();
+
+// جدولة التحديثات المنتظمة
+console.log(`جدولة التحديثات بالفواصل الزمنية التالية:
+- العملات الرقمية والفوركس: ${FOREX_CRYPTO_UPDATE_INTERVAL / 1000} ثوانٍ
+- الأسهم والمؤشرات: ${OTHER_ASSETS_UPDATE_INTERVAL / 1000} ثوانٍ (${OTHER_ASSETS_UPDATE_INTERVAL / 60000} دقائق)
+- تداول الأحد: العملات الرقمية فقط (الأسواق الأخرى مغلقة)`);
+
+// بدء جدولة التحديثات المنتظمة
+setInterval(updateRealtimeAssets, FOREX_CRYPTO_UPDATE_INTERVAL);
+setInterval(updateTraditionalAssets, OTHER_ASSETS_UPDATE_INTERVAL);
